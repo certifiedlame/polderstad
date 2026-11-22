@@ -225,8 +225,8 @@ let shadowsDirty = true; // shadow maps are re-rendered only when needed (see lo
 const sun2 = new THREE.DirectionalLight(0xfff1dc, 1);
 sun2.castShadow = true; sun2.shadow.mapSize.set(2048, 2048);
 sun2.shadow.camera.near = 1; sun2.shadow.camera.far = 400; sun2.shadow.bias = -0.0006; sun2.shadow.normalBias = 0.03;
-const CLOUD_SHADOW_LAYER = 2; // invisible proxies: only the cloud-shadow sun sees them, so fading clouds near the camera never blink their shadows
-sun2.shadow.camera.layers.enable(CLOUD_SHADOW_LAYER);
+// Clouds cast shadows through invisible proxies that never fade with the camera (so shadows do not blink).
+// NB three.js r160 only puts an object into a shadow map if the VIEW camera can see its layer, so proxies stay on layer 0.
 camera.layers.enable(CLOUD_LAYER);
 scene.add(hemi, sun, sun.target, sun2);
 sun2.target = sun.target;
@@ -2345,7 +2345,7 @@ let cloudSeed = 0;
 for (let q = 0; q < CLOUD_N; q++) {
   const m = buildCloud(q + 11);
   m.userData.cloud = true; m.visible = false; m.castShadow = false; scene.add(m);
-  const px = new THREE.Mesh(m.geometry, CLOUD_PROXY_MAT); px.castShadow = true; px.layers.set(CLOUD_SHADOW_LAYER); px.userData.cloud = true; px.visible = false; scene.add(px);
+  const px = new THREE.Mesh(m.geometry, CLOUD_PROXY_MAT); px.castShadow = true; px.userData.cloud = true; px.visible = false; scene.add(px);
   clouds.push({ mesh: m, proxy: px, r: 1, order: 0, q });
 }
 // cloud seed: new shapes, positions, heights and which clouds appear first
@@ -2808,7 +2808,7 @@ setHour(env.hour);
 $('overcast').onclick = () => { env.overcast = !env.overcast; $('overcast').classList.toggle('on', env.overcast); applyEnv(); };
 $('clouds').oninput = e => { env.clouds = +e.target.value; };
 $('cloudSeed').oninput = e => placeClouds(+e.target.value);
-$('cloudShadow').onclick = () => { env.cloudShadow = !env.cloudShadow; if (env.cloudShadow) sun2.shadow.camera.layers.enable(CLOUD_SHADOW_LAYER); else sun2.shadow.camera.layers.disable(CLOUD_SHADOW_LAYER); $('cloudShadow').classList.toggle('on', env.cloudShadow); };
+$('cloudShadow').onclick = () => { env.cloudShadow = !env.cloudShadow; for (const c of clouds) if (c.proxy) c.proxy.castShadow = env.cloudShadow; shadowsDirty = true; $('cloudShadow').classList.toggle('on', env.cloudShadow); };
 $('grow').oninput = e => { growRate = +e.target.value; };
 function toggleGrow() { growOn = !growOn; $('growToggle').classList.toggle('on', !growOn); $('growToggle').textContent = growOn ? '⏸ Pause growth' : '▶ Resume growth'; toast(growOn ? 'Growth on' : 'Growth paused'); }
 $('growToggle').onclick = toggleGrow;
