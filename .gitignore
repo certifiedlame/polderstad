@@ -6,3 +6,5 @@
 !/houdini_tools/
 houdini_tools/__pycache__/
 *.pyc
+!/index.html
+!/.nojekyll
