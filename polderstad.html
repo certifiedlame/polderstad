@@ -177,6 +177,7 @@ import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 const N = 96, HALF = N / 2;
 const GRASS = 0, STREET = 1, MAIN = 2, LANE = 3, BIKE = 4, WATER = 5, PARK = 6, FIELD = 7, LOT = 8, GARDEN = 9, SPECIAL = 10, CENTRE = 11, PLAZA = 12, INDUSTRIAL = 13, RBISLAND = 14, SAND = 15, RAIL = 16; // SAND = beach / dunes, RAIL = railway (on a road cell a level crossing is bridge[k] = 2)
 let townStyle = 'default'; // 'default' | 'zaans' (green timber Zaanse houses) | 'zeeuws' (Zeeland plaster & yellow brick) // INDUSTRIAL = bedrijventerrein road, RBISLAND = roundabout centre island // CENTRE = brick shopping street (winkelstraat), PLAZA = market square (markt)
+const KAS = 17, KAS_GLASS = 0x8fa3ab; // kassen (greenhouses) + their glass colour (glow marker)
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 let type = new Uint8Array(N * N), bridge = new Uint8Array(N * N), tree = new Uint8Array(N * N);
 const facing = new Int8Array(N * N).fill(-1), roadKind = new Uint8Array(N * N), gardenOwner = new Int32Array(N * N).fill(-1), owner = new Int32Array(N * N).fill(-1);
@@ -188,6 +189,17 @@ const isZoneRoad = t => t === STREET || t === MAIN || t === CENTRE || t === PLAZ
 const isBikeable = t => isCarRoad(t) || t === BIKE || t === PLAZA;
 const isCentreKind = t => t === CENTRE || t === PLAZA;
 const isPaved = t => isCarRoad(t) || t === PLAZA || t === RBISLAND; // no kerb between these
+const isNet = t => isBikeable(t) || t === RBISLAND;
+function sameRun(i, j, t, d) { const [dx, dz] = DIRS[d]; let n = 0; for (let q = 1; q <= 5; q++) { const a = i + dx * q, c = j + dz * q; if (inb(a, c) && type[idx(a, c)] === t) n++; else break; } return n; }
+// does the road at (i,j) run along direction d (rather than across it)?
+function pointsAt(i, j, d) { const t = type[idx(i, j)]; return sameRun(i, j, t, d) + sameRun(i, j, t, (d + 2) % 4) >= sameRun(i, j, t, (d + 1) % 4) + sameRun(i, j, t, (d + 3) % 4); }
+function roadLink(i, j, r) {
+  const [dx, dz] = DIRS[r], bi = i + dx, bj = j + dz; if (!inb(bi, bj)) return true;
+  const a = type[idx(i, j)], b = type[idx(bi, bj)];
+  if (!isNet(b)) return false; if (a === b) return true;
+  if (a === PLAZA || b === PLAZA || a === RBISLAND || b === RBISLAND) return true;
+  return pointsAt(i, j, r) || pointsAt(bi, bj, (r + 2) % 4);
+}
 const wx = i => i - HALF + 0.5;
 function hash(a, b, c = 0) { let h = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 1442695041); h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
 const pick = (arr, h) => arr[Math.floor(h * arr.length) % arr.length];
@@ -326,6 +338,8 @@ if (uWet > 0.001) { vec3 fnW = normalize(cross(dFdx(vWpN), dFdy(vWpN))); float u
   roughnessFactor = mix(roughnessFactor, 0.1, uWet * 0.8 * up); diffuseColor.rgb *= 1.0 - 0.25 * uWet; }`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 if (uNight > 0.001 || uGloom > 0.001) {
+  float isKas = step(0.97, vGloss) * (1.0 - step(0.98, vGloss));
+  totalEmissiveRadiance += vec3(1.0, 0.42, 0.12) * isKas * 0.42 * uNight;
   float isWin = step(0.995, vGloss), isLamp = step(0.955, vGloss) * (1.0 - step(0.965, vGloss)), isTail = step(0.935, vGloss) * (1.0 - step(0.945, vGloss));
   vec3 cw = floor(vWpN * 2.5 + 0.013); float rnd = fract(sin(dot(cw, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
   float lit = step(mix(0.4, 0.94, uLate), fract(rnd * 13.37)) * (0.55 + 0.9 * fract(rnd * 7.13));
@@ -335,7 +349,7 @@ if (uNight > 0.001 || uGloom > 0.001) {
   totalEmissiveRadiance += warm * isWin * winOn * 1.5 + vec3(1.0, 0.82, 0.55) * isLamp * 6.0 * vehOn + vec3(1.0, 0.08, 0.05) * isTail * 2.5 * vehOn;
 }`);
 };
-MAT.customProgramCacheKey = () => 'gloss5';
+MAT.customProgramCacheKey = () => 'gloss6';
 const WATER_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.06, metalness: 0, flatShading: true, envMapIntensity: 1.2 });
 const GLOSS = new Map(); // hex → gloss, filled once the palettes exist
 const _c = new THREE.Color();
@@ -516,6 +530,7 @@ const CARS = [0xd9dbdc, 0x2b2d30, 0xf2f2f0, 0x3b5b8a, 0x8a2a2a, 0x6f7478, 0x2f4f
 const GREENS = [0x4f8a34, 0x5a9a3a, 0x467d2e, 0x6aa43f, 0x3f7a2c];
 // specular: glass & solar panels mirror the sky, glazed roof tiles and car paint get a sheen, painted doors/frames a little
 for (const g of [...GREENS, ...GREENS.map(g => dk(g, 1.12)), ...GREENS.map(g => dk(g, 0.92))]) if (!GLOSS.has(g)) GLOSS.set(g, 0.02); // leaf marker (wind sway)
+GLOSS.set(KAS_GLASS, 0.975); // greenhouse glow marker
 GLOSS.set(GLASS, 1); GLOSS.set(0x26313a, 0.985); GLOSS.set(0xfff6d0, 0.96); GLOSS.set(0xf3e7bf, 0.96); GLOSS.set(0xb02020, 0.94);
 GLOSS.set(0x1d2a44, 0.9);
 for (const h of CARS) GLOSS.set(h, 0.72);
@@ -583,7 +598,7 @@ function waterParts(b, bw, i, j) {
 function roadTile(i, j, t) {
   const k = idx(i, j), b = new B(), bw = new B();
   const nt = (dx, dz) => inb(i + dx, j + dz) ? type[idx(i + dx, j + dz)] : t;
-  const nb = DIRS.map(([dx, dz]) => nt(dx, dz)), road = nb.map(isPaved), isC = t === CENTRE, walkCol = isC ? CWALK : t === INDUSTRIAL ? 0xa3a39e : SIDEWALK;
+  const nb = DIRS.map(([dx, dz]) => nt(dx, dz)), road = nb.map((n, r) => isPaved(n) && roadLink(i, j, r)), isC = t === CENTRE, walkCol = isC ? CWALK : t === INDUSTRIAL ? 0xa3a39e : SIDEWALK;
   const br = bridge[k] === 1, L = br ? 0.06 : 0, SW = 0.17, so = 0.5 - SW / 2;
   let rbDir = null; for (let b2 = -1; b2 <= 1; b2++) for (let a = -1; a <= 1; a++) if ((a || b2) && inb(i + a, j + b2) && type[idx(i + a, j + b2)] === RBISLAND) rbDir = [-a, -b2]; // part of a roundabout ring
   const nearRb = !!rbDir;
@@ -624,7 +639,7 @@ function roadTile(i, j, t) {
     b.bb(dx * (o - 0.11), 0.515, dz * (o - 0.11), 0.05, 0.016, 0.05, 0xfff6d0);
   }
   // Dutch street furniture
-  const carN = nb.map(isCarRoad), lamps = [];
+  const carN = nb.map((n, r) => road[r] && isCarRoad(n)), lamps = [];
   if (sig) signalPoles(b, carN, i, j, lamps);
   if (!br && (t === STREET || t === INDUSTRIAL)) for (let r = 0; r < 4; r++) {
     // side street meeting a main road: shark teeth + yield sign, or a stop line at traffic lights
@@ -674,10 +689,10 @@ const TLM = [0, 1].map(() => [0, 1].map(() => TL_COL.map((c, q) => { const m = n
 const TL_GEO = new THREE.BoxGeometry(0.036, 0.036, 0.036), TL_GEO_S = new THREE.BoxGeometry(0.022, 0.022, 0.022);
 const signalState = [[2, 0], [2, 0]]; // [group][axis] → 0 red, 1 amber, 2 green
 let signalCells = new Set();
-function carDeg(i, j) { if (!inb(i, j)) return 0; let n = 0; for (const [dx, dz] of DIRS) if (inb(i + dx, j + dz) && isCarRoad(type[idx(i + dx, j + dz)])) n++; return n; }
+function carDeg(i, j) { if (!inb(i, j)) return 0; let n = 0; DIRS.forEach(([dx, dz], r) => { if (inb(i + dx, j + dz) && isCarRoad(type[idx(i + dx, j + dz)]) && roadLink(i, j, r)) n++; }); return n; }
 function signalCell(i, j) {
   if (!inb(i, j)) return false; const k = idx(i, j); if (type[k] !== MAIN || bridge[k]) return false;
-  const c = DIRS.map(([dx, dz]) => inb(i + dx, j + dz) && isCarRoad(type[idx(i + dx, j + dz)])), n = c.filter(Boolean).length;
+  const c = DIRS.map(([dx, dz], r) => inb(i + dx, j + dz) && isCarRoad(type[idx(i + dx, j + dz)]) && roadLink(i, j, r)), n = c.filter(Boolean).length;
   if (n < 3) return false;
   for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { if (!inb(i + a, j + b)) continue; const tt = type[idx(i + a, j + b)]; if (tt === RBISLAND) return false; if (a && b && isCarRoad(tt)) return false; } // no roundabouts, no wide (2-cell) roads
   if (n === 4) return true;
@@ -719,7 +734,7 @@ function pathTile(i, j, t) {
   const k = idx(i, j), b = new B(), bw = new B(), br = bridge[k] === 1;
   if (br) waterParts(b, bw, i, j);
   const nt = (dx, dz) => inb(i + dx, j + dz) ? type[idx(i + dx, j + dz)] : t;
-  const conn = DIRS.map(([dx, dz]) => { const n = nt(dx, dz); return t === LANE ? (isCarRoad(n) || n === BIKE) : isBikeable(n); });
+  const conn = DIRS.map(([dx, dz], r) => { const n = nt(dx, dz); return (t === LANE ? (isCarRoad(n) || n === BIKE) : isBikeable(n)) && roadLink(i, j, r); });
   const w = t === LANE ? 0.46 : 0.32, L = br ? 0.07 : 0;
   if (br) {
     connector(b, w + 0.12, -0.04, 0.05 + L, 0x7a7069, conn, null);
@@ -773,6 +788,11 @@ function plazaTile(i, j) {
     });
   } else if (h < 0.32) addTree(b, 0, 0, 'round', 0.75, hash(i, j, 125));
   else if (h < 0.42) lantern(b, 0.3, 0.3);
+  else if (h < 0.53 && h >= 0.48 && edge < 0) {
+    const fish = hash(i, j, 126) < 0.5;
+    if (fish) { b.bb(0, 0.05, 0, 0.42, 0.16, 0.22, 0xf4f4f2); b.bb(0, 0.21, 0.05, 0.4, 0.02, 0.12, 0xcfe0ea); for (let q = 0; q < 5; q++) b.bb(-0.2 + q * 0.1, 0.4, 0.04, 0.1, 0.02, 0.36, q % 2 ? 0x1f4fb4 : 0xffffff); for (const x of [-0.2, 0.2]) b.bb(x, 0.2, -0.1, 0.02, 0.2, 0.02, 0xdddddd); }
+    else { b.bb(0, 0, 0, 0.44, 0.36, 0.28, 0xf5c518); b.bb(0, 0.36, 0, 0.5, 0.035, 0.34, 0xd8262e); b.bb(0, 0.14, 0.142, 0.34, 0.14, 0.01, GLASS); }
+  }
   else if (h < 0.48) { b.bb(0, 0.04, 0, 0.28, 0.025, 0.08, 0x7a5a3a); b.bb(0, 0.065, -0.035, 0.28, 0.06, 0.02, 0x7a5a3a); b.bb(-0.12, 0, 0, 0.02, 0.05, 0.06, 0x333333); b.bb(0.12, 0, 0, 0.02, 0.05, 0.06, 0x333333); }
   return b.mesh(MAT, true);
 }
@@ -889,6 +909,18 @@ function parkTile(i, j) {
   if (h < 0.16) { b.bb(0, 0, 0, 0.42, 0.03, 0.26, 0x5b4029); const cols = [0xd8262e, 0xf5c518, 0xf06aa8, 0xffffff]; for (let q = 0; q < 6; q++) b.bb(-0.15 + (q % 3) * 0.15, 0.03, -0.06 + Math.floor(q / 3) * 0.12, 0.06, 0.04, 0.06, pick(cols, hash(i, j, q))); }
   else if (h < 0.26) { b.bb(0, 0.04, 0, 0.28, 0.025, 0.08, 0x7a5a3a); b.bb(0, 0.065, -0.035, 0.28, 0.06, 0.02, 0x7a5a3a); b.bb(-0.12, 0, 0, 0.02, 0.05, 0.06, 0x333333); b.bb(0.12, 0, 0, 0.02, 0.05, 0.06, 0x333333); }
   else if (h < 0.34) { b.bb(0, -0.04, 0, 1, 0.052, 0.18, 0xcfc4ad); }
+  return b.mesh(MAT, true);
+}
+// kassen: Venlo-type glasshouse — glass walls on the outside edges, saw-tooth glass roof, gutters; glows orange at night
+
+function kasTile(i, j) {
+  const b = new B(), H = 0.42, kn = DIRS.map(([dx, dz]) => inb(i + dx, j + dz) && type[idx(i + dx, j + dz)] === KAS);
+  b.bb(0, -0.04, 0, 1, 0.05, 1, 0x9da39b);
+  for (let q = 0; q < 4; q++) b.bb(-0.375 + q * 0.25, 0.01, 0, 0.16, 0.06, 0.94, q % 2 ? 0x3f7a2c : 0x4f8a35); // crops on tables, seen through the glass
+  for (let r = 0; r < 4; r++) if (!kn[r]) { const [dx, dz] = DIRS[r]; b.bb(dx * 0.49, 0.01, dz * 0.49, dx ? 0.02 : 1, H, dz ? 0.02 : 1, KAS_GLASS); for (const o of [-0.25, 0.25]) b.bb(dx * 0.495 + (dz ? o : 0), 0.01, dz * 0.495 + (dx ? o : 0), dx ? 0.022 : 0.015, H, dz ? 0.022 : 0.015, 0x8a9196); }
+  for (let q = 0; q < 4; q++) b.prism(0, H + 0.01, -0.375 + q * 0.25, 1, 0.25, 0.1, KAS_GLASS, KAS_GLASS, false);
+  for (let q = 0; q <= 4; q++) b.bb(0, H, -0.5 + q * 0.25, 1, 0.02, 0.022, 0x5d6469); for (let q = 0; q <= 4; q++) b.bb(-0.5 + q * 0.25, H + 0.005, 0, 0.012, 0.012, 1, 0x6d7479); // gutters + roof bars
+  if (!kn[0] && !kn[1] && hash(i, j, 900) < 0.5) { b.cyl(0.3, 0, 0.3, 0.04, 0.05, 1.2, 8, 0xc9cdd0); b.cyl(-0.2, 0, 0.3, 0.12, 0.12, 0.3, 12, 0x9da3a8); } // boiler chimney + water silo
   return b.mesh(MAT, true);
 }
 function fieldTile(i, j) {
@@ -1227,6 +1259,157 @@ function buildChurch() {
   return b.mesh();
 }
 const spinners = [];
+// windmolen (modern wind turbine): tapered white tower, nacelle that turns into the wind, 3-blade rotor that spins with
+// the wind. On water it stands on a yellow transition piece with a platform (offshore / IJsselmeer style).
+function buildWindmolen(sp) {
+  const g = new THREE.Group(), b = new B(), WH = 0xf1f2ef, H = 6.2;
+  const wet = !!(sp && inb(sp.i, sp.j) && type[idx(sp.i, sp.j)] === WATER);
+  if (wet) { b.cyl(0, -0.3, 0, 0.17, 0.19, 0.78, 14, 0xf2c200); b.cyl(0, 0.46, 0, 0.27, 0.27, 0.035, 14, 0x8a8f94); b.bb(0.2, 0.495, 0, 0.012, 0.09, 0.2, 0x8a8f94); }
+  else { b.cyl(0, -0.02, 0, 0.24, 0.26, 0.06, 14, 0xb8b2a6); b.bb(0.34, 0, 0.12, 0.16, 0.15, 0.12, 0x9aa0a6); b.bb(0.34, 0.15, 0.12, 0.18, 0.02, 0.14, 0x6f7479); }
+  const y0 = wet ? 0.495 : 0.04;
+  b.cyl(0, y0, 0, 0.065, 0.12, H - y0, 16, WH);
+  b.bb(0, y0 + 0.02, 0.112, 0.06, 0.12, 0.012, 0xd9dcd8); // door
+  g.add(b.mesh());
+  const head = new THREE.Group(); head.position.y = H; head.name = 'nacelle';
+  const hb = new B();
+  hb.bb(0, -0.08, -0.13, 0.17, 0.17, 0.52, WH); hb.bb(0, 0.09, -0.32, 0.05, 0.03, 0.05, 0xb02020); // body + red aviation light (glows at night)
+  head.add(hb.mesh());
+  const rotor = new THREE.Group(); rotor.position.set(0, 0, 0.16); rotor.name = 'rotor'; rotor.userData.spin = 1.35;
+  const rb = new B(); rb.box(0, 0, 0.03, 0.12, 0.12, 0.12, WH); rb.box(0, 0, 0.11, 0.07, 0.07, 0.06, WH);
+  for (let q = 0; q < 3; q++) {
+    const a = q * Math.PI * 2 / 3, sx = Math.sin(a), sy = Math.cos(a);
+    rb.box(sx * 0.5, sy * 0.5, 0, 0.13, 0.8, 0.026, WH, 0, 0, -a);
+    rb.box(sx * 1.75, sy * 1.75, 0, 0.08, 1.75, 0.02, WH, 0, 0, -a);
+    rb.box(sx * 2.88, sy * 2.88, 0, 0.042, 0.55, 0.016, WH, 0, 0, -a);
+  }
+  rotor.add(rb.mesh()); head.add(rotor); g.add(head); g.userData.head = head;
+  return g;
+}
+// ───────── Dutch landmarks: stolpboerderij, hooiberg, watertoren, klokkentoren, snackkraam ─────────
+function squarePyramid(b, cx, y0, cz, half, h, col) { b.cone(cx, y0, cz, half * Math.SQRT2, h, 4, col, Math.PI / 4); }
+function squareFrustum(b, cx, y0, cz, halfTop, halfBot, h, col) { const g = new THREE.CylinderGeometry(halfTop * Math.SQRT2, halfBot * Math.SQRT2, h, 4); g.rotateY(Math.PI / 4); g.translate(cx, y0 + h / 2, cz); b.push(colorize(g, col)); }
+// hooiberg: haystack under a square thatched roof on four tall poles (the roof can slide up and down the poles)
+function hooibergParts(b, x, z, s = 1, roofY = 0.78) {
+  const P = 0x4a3a2a, hay = 0xd9b44a;
+  for (const [px, pz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.bb(x + px * 0.27 * s, 0, z + pz * 0.27 * s, 0.035 * s, 1.08 * s, 0.035 * s, P);
+  b.bb(x, 0, z, 0.48 * s, 0.42 * s, 0.48 * s, hay); squarePyramid(b, x, 0.42 * s, z, 0.24 * s, 0.22 * s, 0xcfa53e);
+  squarePyramid(b, x, roofY * s, z, 0.34 * s, 0.26 * s, 0x6e5a3a); b.bb(x, roofY * s - 0.02 * s, z, 0.62 * s, 0.03 * s, 0.62 * s, 0x5a4a30);
+}
+function buildHooiberg() { const b = new B(); b.bb(0, -0.04, 0, 1, 0.05, 1, 0x6a9a44); hooibergParts(b, 0, 0, 1.1); return b.mesh(); }
+// stolpboerderij: the North-Holland pyramid farm — square brick base, huge thatched pyramid with a red pantile skirt,
+// decorated front ('pronkgevel' side) with white windows and green shutters, big barn doors, plus a hooiberg in the yard
+function buildStolp() {
+  const b = new B(), brick = 0x8a4a35, thatch = 0x6e5a3a, red = 0xb4503a, cx = -0.3, cz = -0.25, half = 0.95, H = 0.36;
+  b.bb(0, -0.04, 0, 3, 0.05, 3, 0x6a9a44);
+  b.bb(cx + 0.2, -0.039, 1.15, 0.5, 0.052, 0.7, 0xc9bfa8); b.bb(0.9, -0.039, 0.75, 0.9, 0.052, 1.0, 0xc9bfa8); // gravel yard + path
+  b.bb(cx, 0, cz, half * 2, H, half * 2, brick); b.bb(cx, 0, cz, half * 2 + 0.01, 0.05, half * 2 + 0.01, 0x5a3a2a);
+  squareFrustum(b, cx, H, cz, half * 0.86, half + 0.1, 0.16, red);                 // tiled lower roof band
+  squarePyramid(b, cx, H + 0.16, cz, half * 0.86, 1.15, thatch);                  // thatch
+  b.bb(cx, H + 1.2, cz, 0.16, 0.16, 0.16, red); b.bb(cx + 0.35, H + 0.7, cz + 0.2, 0.09, 0.4, 0.09, brick); // nok + chimney
+  const zf = cz + half;                                                              // front (+z)
+  for (const wx2 of [-0.45, -0.15, 0.25, 0.55]) { win(b, cx + wx2, 0.06, zf, 0.14, 0.18, 0xffffff, 1); for (const sd of [-1, 1]) b.bb(cx + wx2 + sd * 0.1, 0.06, zf + 0.012, 0.035, 0.18, 0.01, 0x2a5a3a); }
+  b.bb(cx + 0.05, 0.02, zf + 0.012, 0.11, 0.26, 0.02, 0xf2efe6); b.bb(cx + 0.05, 0.03, zf + 0.02, 0.08, 0.22, 0.02, 0x2a5a3a);
+  const xs = cx + half; b.bb(xs + 0.012, 0.0, cz + 0.2, 0.02, 0.33, 0.42, 0x2a5a3a); b.bb(xs + 0.02, 0.0, cz + 0.2, 0.02, 0.33, 0.02, 0xf2efe6); // wagon doors
+  for (const dz of [-0.45, 0.65]) win(b, xs, 0.12, cz + dz, 0.1, 0.12, 0xffffff, 1);
+  hooibergParts(b, 1.0, -1.0, 1.15);
+  addTree(b, -1.25, 1.2, 'linden', 1.0, 0.3); addTree(b, 1.25, 1.25, 'round', 0.9, 0.7);
+  b.bb(1.45, 0, 0, 0.03, 0.1, 3, 0xe9e6df); // white fence along the lane side
+  return b.mesh();
+}
+// watertoren: octagonal brick shaft, wider tank storey with a ring of windows, slate roof with a lantern on top
+function buildWatertoren() {
+  const b = new B(), brick = 0x8a4a35, light = 0xa5604a, stone = 0xd9d2c3, slate = 0x3d4048;
+  b.bb(0, -0.04, 0, 2, 0.05, 2, 0x6a9a44); b.bb(0, -0.039, 0.6, 0.25, 0.052, 0.8, 0xc9bfa8);
+  b.cyl(0, 0, 0, 0.5, 0.55, 0.12, 8, stone);
+  b.cyl(0, 0.12, 0, 0.4, 0.47, 2.7, 8, brick);
+  for (const y of [0.9, 1.7, 2.5]) b.cyl(0, y, 0, 0.44 - y * 0.025, 0.45 - y * 0.025, 0.05, 8, stone);
+  for (let q = 0; q < 8; q++) { const a = q / 8 * Math.PI * 2 + Math.PI / 8; for (const y of [0.55, 1.3, 2.05]) b.box(Math.sin(a) * (0.455 - y * 0.026), y + 0.12, Math.cos(a) * (0.455 - y * 0.026), 0.07, 0.22, 0.02, GLASS, 0, a, 0); }
+  b.box(0, 0.22, 0.47, 0.13, 0.26, 0.03, 0x3a2a20); // door
+  b.cyl(0, 2.82, 0, 0.62, 0.42, 0.18, 8, stone);   // corbel
+  b.cyl(0, 3.0, 0, 0.64, 0.62, 0.7, 8, light);     // tank storey
+  for (let q = 0; q < 16; q++) { const a = q / 16 * Math.PI * 2; b.box(Math.sin(a) * 0.635, 3.3, Math.cos(a) * 0.635, 0.1, 0.24, 0.02, GLASS, 0, a, 0); }
+  b.cyl(0, 3.7, 0, 0.7, 0.68, 0.06, 8, stone);
+  b.cone(0, 3.76, 0, 0.72, 0.55, 8, slate);
+  b.cyl(0, 4.28, 0, 0.12, 0.13, 0.2, 8, 0xe9e6df); b.cone(0, 4.48, 0, 0.15, 0.22, 8, slate); b.cyl(0, 4.7, 0, 0.01, 0.01, 0.18, 4, 0xc9a43a);
+  return b.mesh();
+}
+// klokkentoren: square brick bell tower with clock faces (the hands show the game time), open belfry with bells that
+// swing on every full hour, and a slate spire with a golden weathercock
+function buildKlokkentoren() {
+  const g = new THREE.Group(), b = new B(), brick = 0x7d3e2e, stone = 0xd9d2c3, slate = 0x3d4048, S = 0.62;
+  b.bb(0, -0.04, 0, 1, 0.05, 1, 0xb8b2a6);
+  b.bb(0, 0, 0, S + 0.06, 0.18, S + 0.06, stone); b.bb(0, 0.18, 0, S, 2.5, S, brick);
+  for (const y of [0.9, 1.8, 2.62]) b.bb(0, y, 0, S + 0.04, 0.05, S + 0.04, stone);
+  b.bb(0, 0.18, S / 2 + 0.005, 0.16, 0.34, 0.02, 0x3a2a20);
+  for (let r = 0; r < 4; r++) { const a = r * Math.PI / 2; b.box(Math.sin(a) * (S / 2 + 0.005), 1.35, Math.cos(a) * (S / 2 + 0.005), 0.1, 0.3, 0.012, GLASS, 0, a, 0); }
+  b.bb(0, 2.67, 0, S + 0.02, 0.5, S + 0.02, brick);                       // clock storey
+  for (const [px, pz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.bb(px * (S / 2 - 0.05), 3.17, pz * (S / 2 - 0.05), 0.1, 0.55, 0.1, brick); // belfry pillars
+  b.bb(0, 3.17, 0, S - 0.2, 0.04, S - 0.2, 0x5a3a2a);
+  b.bb(0, 3.72, 0, S + 0.08, 0.07, S + 0.08, stone);
+  squarePyramid(b, 0, 3.79, 0, (S + 0.04) / 2, 1.3, slate);
+  b.cyl(0, 5.09, 0, 0.008, 0.008, 0.22, 4, 0xc9a43a); b.cyl(0, 5.2, 0, 0.035, 0.035, 0.035, 6, 0xc9a43a); b.bb(0, 5.27, 0, 0.012, 0.05, 0.09, 0xc9a43a);
+  g.add(b.mesh());
+  const hands = [];
+  for (let r = 0; r < 4; r++) {
+    const face = new THREE.Group(); face.rotation.y = r * Math.PI / 2; face.position.set(0, 2.92, 0); g.add(face);
+    const fb = new B(); fb.cyl(0, S / 2 + 0.01, 0, 0.17, 0.17, 0.012, 16, 0xf2efe6); fb.cyl(0, S / 2 + 0.008, 0, 0.19, 0.19, 0.01, 16, 0x1d1d1d);
+    const fm = fb.mesh(); fm.rotation.x = Math.PI / 2; fm.userData.dyn = true; face.add(fm);
+    const mk = (len, w, zz) => { const hg = new THREE.Group(); hg.position.z = S / 2 + zz; const hb2 = new B(); hb2.bb(0, -0.01, 0, w, len + 0.02, 0.006, 0x111111); const hm = hb2.mesh(); hm.userData.dyn = true; hg.add(hm); face.add(hg); return hg; };
+    hands.push([mk(0.09, 0.022, 0.026), mk(0.14, 0.014, 0.032)]);
+  }
+  const bells = [];
+  for (const bx of [-0.12, 0.12]) {
+    const piv = new THREE.Group(); piv.position.set(bx, 3.62, 0); g.add(piv);
+    const bb = new B(); bb.cone(0, -0.2, 0, 0.09, 0.17, 10, 0x8c6a2a); bb.bb(0, -0.04, 0, 0.03, 0.04, 0.03, 0x5a4a30);
+    const bm = bb.mesh(); bm.userData.dyn = true; piv.add(bm); bells.push(piv);
+  }
+  g.userData.clock = { hands, bells, lastHour: null, ring: 0 };
+  return g;
+}
+// snackkraam: a white/blue herring cart or a yellow/red chip stand, with a sign and a couple of standing tables
+function buildSnackkraam(sp) {
+  const g = new THREE.Group(), b = new B(), herring = sp ? hash(sp.i, sp.j, 777) < 0.5 : true;
+  if (herring) {
+    b.bb(0, 0.05, 0, 0.5, 0.18, 0.26, 0xf4f4f2); for (const x of [-0.18, 0.18]) b.cyl(x, 0, 0.14, 0.05, 0.05, 0.02, 10, 0x1a1a1a);
+    b.bb(0, 0.23, 0.06, 0.48, 0.02, 0.14, 0xcfe0ea); b.bb(0, 0.25, 0.06, 0.4, 0.04, 0.1, 0xb8c4cc);  // glass counter with fish
+    for (let q = 0; q < 6; q++) b.bb(-0.25 + q * 0.1 + 0.05, 0.45, 0.05, 0.1, 0.025, 0.42, q % 2 ? 0x1f4fb4 : 0xffffff); // awning
+    for (const x of [-0.24, 0.24]) b.bb(x, 0.23, -0.1, 0.02, 0.22, 0.02, 0xdddddd);
+  } else {
+    b.bb(0, 0, 0, 0.52, 0.42, 0.32, 0xf5c518); b.bb(0, 0.42, 0, 0.6, 0.04, 0.4, 0xd8262e); b.bb(0, 0.16, 0.162, 0.4, 0.16, 0.01, GLASS);
+    b.bb(0, 0.15, 0.17, 0.44, 0.02, 0.08, 0xf2efe6);
+  }
+  for (const [x, z] of [[-0.3, 0.38], [0.3, 0.4]]) { b.bb(x, 0, z, 0.03, 0.2, 0.03, 0x3a3a3a); b.cyl(x, 0.2, z, 0.07, 0.07, 0.015, 10, 0xe8e4da); }
+  g.add(b.mesh());
+  const sign = textPlate(herring ? 'HOLLANDSE NIEUWE' : 'FRIET', herring ? '#1f4fb4' : '#ffffff', herring ? '#ffffff' : '#d8262e', 0.42, 0.07);
+  sign.position.set(0, herring ? 0.52 : 0.5, herring ? 0.27 : 0.21); g.add(sign);
+  return g;
+}
+// drawbridge (ophaalbrug): white bascule bridge over a canal; the leaf + balance beams lift for passing boats
+function isDrawSpot(i, j) {
+  const k = idx(i, j), t = type[k]; if (bridge[k] !== 1 || !(t === STREET || t === CENTRE)) return false;
+  const P = (dx, dz) => inb(i + dx, j + dz) && isPaved(type[idx(i + dx, j + dz)]), W = (dx, dz) => inb(i + dx, j + dz) && type[idx(i + dx, j + dz)] === WATER;
+  return (P(1, 0) && P(-1, 0) && W(0, 1) && W(0, -1)) || (P(0, 1) && P(0, -1) && W(1, 0) && W(-1, 0));
+}
+function drawbridgeTile(i, j, t) {
+  const b = new B(), bw = new B(), WH = 0xf4f4f0, alongX = inb(i + 1, j) && isPaved(type[idx(i + 1, j)]);
+  waterParts(b, bw, i, j);
+  const deck = t === STREET ? KLINKER : CBRICK, P = (u, y, v, lu, h, lv, col) => alongX ? b.bb(u, y, v, lu, h, lv, col) : b.bb(v, y, u, lv, h, lu, col);
+  for (const s of [-1, 1]) { P(s * 0.42, -0.06, 0, 0.16, 0.14, 0.8, 0x8a8178); P(s * 0.42, 0.08, 0, 0.16, 0.012, 0.66, deck); for (const v of [-0.36, 0.36]) P(s * 0.42, 0.08, v, 0.16, 0.08, 0.025, WH); }
+  for (const v of [-0.4, 0.4]) { P(-0.36, 0.08, v, 0.05, 0.78, 0.05, WH); P(-0.36, 0.08, v, 0.12, 0.05, 0.08, 0x3a3a3a); }
+  P(-0.36, 0.84, 0, 0.06, 0.05, 0.86, WH);
+  const out = grp(b.mesh(MAT, true), bw.mesh(WATER_MAT, false));
+  const mkPivot = (u, y) => { const o = new THREE.Group(); o.position.set(alongX ? u : 0, y, alongX ? 0 : u); o.rotation.y = alongX ? 0 : -Math.PI / 2; const inner = new THREE.Group(); o.add(inner); out.add(o); return inner; };
+  const leaf = mkPivot(-0.34, 0.085), lb = new B();
+  lb.bb(0.34, -0.05, 0, 0.68, 0.05, 0.66, deck); lb.bb(0.34, -0.06, 0, 0.66, 0.015, 0.6, 0x5a4a3a);
+  for (const v of [-0.33, 0.33]) { lb.bb(0.34, 0.06, v, 0.68, 0.02, 0.02, WH); for (let q = 0; q < 5; q++) lb.bb(0.04 + q * 0.155, 0, v, 0.02, 0.07, 0.02, WH); }
+  const lm = lb.mesh(); lm.userData.dyn = true; leaf.add(lm);
+  const beams = mkPivot(-0.36, 0.86), bb2 = new B();
+  for (const v of [-0.4, 0.4]) { bb2.bb(0.1, 0, v, 0.95, 0.045, 0.045, WH); bb2.bb(0.57, -0.4, v, 0.012, 0.4, 0.012, 0x3a3a3a); }
+  bb2.bb(-0.37, -0.02, 0, 0.06, 0.08, 0.86, WH);
+  const bm = bb2.mesh(); bm.userData.dyn = true; beams.add(bm);
+  out.userData.draw = { leaf, beams, alongX };
+  return out;
+}
 function buildMill() {
   const g = new THREE.Group(), b = new B();
   b.cyl(0, 0, 0, 0.6, 0.66, 0.55, 8, 0x8a4b38);
@@ -1537,6 +1720,12 @@ const SPEC = {
   fabriek: { w: 4, h: 3, build: buildFactory, pop: 0, slot: 'factory' },
   kerk: { w: 2, h: 4, build: buildChurch, pop: 0, slot: 'church' },
   molen: { w: 2, h: 2, build: buildMill, pop: 1, slot: 'windmill' },
+  windmolen: { w: 1, h: 1, build: buildWindmolen, pop: 0, slot: 'windturbine' },
+  stolp: { w: 3, h: 3, build: buildStolp, pop: 4, slot: 'stolpfarm' },
+  hooiberg: { w: 1, h: 1, build: buildHooiberg, pop: 0, slot: 'haystack' },
+  watertoren: { w: 2, h: 2, build: buildWatertoren, pop: 0, slot: 'watertower' },
+  klokkentoren: { w: 1, h: 1, build: buildKlokkentoren, pop: 0, slot: 'belltower' },
+  snackkraam: { w: 1, h: 1, build: buildSnackkraam, pop: 0, slot: 'snackstall' },
   boerderij: { w: 3, h: 3, build: buildFarm, pop: 5, slot: 'farm' },
   flat: { w: 5, h: 2, build: buildFlat, pop: 36, slot: 'flats' },
 };
@@ -1571,7 +1760,7 @@ function bakeChunk(ci) {
       if (animObjs.has(o)) { c.dirtyAt = bakeClock; return; } // still animating → try again later
       o.updateMatrixWorld(true);
       o.traverse(m => {
-        if (!m.isMesh || !m.visible || (m.material !== MAT && m.material !== WATER_MAT)) return;
+        if (!m.isMesh || !m.visible || (m.material !== MAT && m.material !== WATER_MAT) || m.userData.dyn) return;
         const src = m.geometry; if (!src.attributes.color || !src.attributes.normal) return;
         const g = new THREE.BufferGeometry();
         for (const a of BAKE_ATTRS) if (src.attributes[a]) g.setAttribute(a, src.attributes[a].clone());
@@ -1597,7 +1786,7 @@ function bakeStep(dt) {
   bakeClock += dt;
   for (let q = 0; q < chunks.length; q++) { const c = chunks[q]; if (buildFx.active && buildFx.chunkPending[q] > 0) continue; if (c.dirty && bakeClock - c.dirtyAt > 1.2) { bakeChunk(q); return; } }
 }
-const TILE_TAG = { [STREET]: 'road_street', [MAIN]: 'road_main', [LANE]: 'road_lane', [BIKE]: 'path_bike', [WATER]: 'water_ditch', [PARK]: 'land_park', [FIELD]: 'land_field', [CENTRE]: 'road_shopstreet', [PLAZA]: 'square_market', [INDUSTRIAL]: 'road_industrial', [RBISLAND]: 'road_roundabout', [SAND]: 'land_dune', [RAIL]: 'rail_track' };
+const TILE_TAG = { [KAS]: 'land_greenhouse', [STREET]: 'road_street', [MAIN]: 'road_main', [LANE]: 'road_lane', [BIKE]: 'path_bike', [WATER]: 'water_ditch', [PARK]: 'land_park', [FIELD]: 'land_field', [CENTRE]: 'road_shopstreet', [PLAZA]: 'square_market', [INDUSTRIAL]: 'road_industrial', [RBISLAND]: 'road_roundabout', [SAND]: 'land_dune', [RAIL]: 'rail_track' };
 function tagFor(arr, k) {
   if (arr === cellObj) return (TILE_TAG[type[k]] || 'tile') + (bridge[k] === 1 ? '_bridge' : bridge[k] === 2 ? '_crossing' : '');
   if (arr === treeObj) return 'tree';
@@ -1648,13 +1837,14 @@ function popIn(obj, dur = 0.55, kind = 'pop', delay = 0) {
 }
 function buildCellVisual(k, anim = false, delay = 0) {
   const i = k % N, j = (k / N) | 0, t = type[k]; let o = null;
-  if (t === STREET || t === MAIN || t === CENTRE || t === INDUSTRIAL) o = roadTile(i, j, t);
+  if (t === STREET || t === MAIN || t === CENTRE || t === INDUSTRIAL) o = isDrawSpot(i, j) ? drawbridgeTile(i, j, t) : roadTile(i, j, t);
   else if (t === RBISLAND) o = roundaboutTile(i, j);
   else if (t === PLAZA) o = plazaTile(i, j);
   else if (t === LANE || t === BIKE) o = pathTile(i, j, t);
   else if (t === WATER) o = waterTile(i, j);
   else if (t === PARK) o = parkTile(i, j);
   else if (t === FIELD) o = fieldTile(i, j);
+  else if (t === KAS) o = kasTile(i, j);
   else if (t === SAND) o = sandTile(i, j);
   else if (t === RAIL) o = railTile(i, j);
   if (o && bridge[k] === 2 && isCarRoad(t)) addCrossing(o, i, j);
@@ -1720,6 +1910,8 @@ function computeDerived() {
   const urban = new Uint8Array(N * N);
   carCells = []; bikeCells = []; railCells = []; crossingCells = [];
   for (let k = 0; k < N * N; k++) { if (railCell(k)) railCells.push(k); if (bridge[k] === 2) crossingCells.push(k); }
+  drawCells = []; for (let k = 0; k < N * N; k++) if (bridge[k] === 1 && isDrawSpot(k % N, (k / N) | 0)) drawCells.push(k);
+  drawSet = new Set(drawCells);
   signalCells = new Set(); for (let k = 0; k < N * N; k++) if (type[k] === MAIN && signalCell(k % N, (k / N) | 0)) signalCells.add(k);
   for (let k = 0; k < N * N; k++) { const t = type[k]; if (t === LOT || t === GARDEN || t === STREET || t === MAIN || t === SPECIAL || t === CENTRE || t === PLAZA || t === INDUSTRIAL || t === RBISLAND) urban[k] = 1; if (isCarRoad(t)) carCells.push(k); if (isBikeable(t)) bikeCells.push(k); }
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
@@ -1753,15 +1945,17 @@ function afterChangeInner(cells, origin, tileAnim, changed) {
   derivedDirty = true; updateStats();
 }
 let derivedDirty = false;
+const keepGround = (kind, t) => (kind === 'windmolen' && (t === WATER || t === SAND || t === FIELD)) || (kind === 'snackkraam' && t === PLAZA);
+function specAllowed(kind, t) { return t === GRASS || t === LOT || t === GARDEN || t === FIELD || t === PARK || (kind === 'windmolen' && (t === WATER || t === SAND)) || (kind === 'snackkraam' && t === PLAZA); }
 function placeSpecial(kind, i0, j0, rot, anim) {
   const [fw, fh] = fpOf(kind, rot), cells = [];
   for (let b = 0; b < fh; b++) for (let a = 0; a < fw; a++) {
     const i = i0 + a, j = j0 + b; if (!inb(i, j)) return null;
-    const t = type[idx(i, j)]; if (!(t === GRASS || t === LOT || t === GARDEN || t === FIELD || t === PARK) || owner[idx(i, j)] >= 0) return null;
+    const t = type[idx(i, j)]; if (!specAllowed(kind, t) || owner[idx(i, j)] >= 0) return null;
     cells.push(idx(i, j));
   }
   const sp = { id: specialSeq++, kind, i: i0, j: j0, rot };
-  for (const k of cells) { type[k] = SPECIAL; owner[k] = sp.id; tree[k] = 0; facing[k] = -1; }
+  for (const k of cells) { if (!keepGround(kind, type[k])) type[k] = SPECIAL; owner[k] = sp.id; tree[k] = 0; facing[k] = -1; }
   specials.push(sp); buildSpecialMesh(sp, anim); return cells;
 }
 function buildSpecialMesh(sp, anim) {
@@ -1782,7 +1976,7 @@ function removeSpecial(id) {
   const sp = specials[q]; specials.splice(q, 1);
   sp.obj.traverse(c => { const n = spinners.indexOf(c); if (n >= 0) spinners.splice(n, 1); });
   fadeOut(sp.obj, 0, 'pop'); // landmarks sink away instead of vanishing
-  const cells = []; for (let k = 0; k < N * N; k++) if (owner[k] === id) { owner[k] = -1; type[k] = GRASS; cells.push(k); }
+  const cells = []; for (let k = 0; k < N * N; k++) if (owner[k] === id) { owner[k] = -1; if (type[k] === SPECIAL) type[k] = GRASS; cells.push(k); }
   return cells;
 }
 function fullRebuild(instant = true) {
@@ -1851,6 +2045,7 @@ function lPath(a, b) {
 function rectCells(a, b) { const out = []; for (let j = Math.min(a.j, b.j); j <= Math.max(a.j, b.j); j++) for (let i = Math.min(a.i, b.i); i <= Math.max(a.i, b.i); i++) out.push(idx(i, j)); return out; }
 
 // ───────────────────────── tools & input ─────────────────────────
+const TURBINE_SVG = `<svg width="26" height="26" viewBox="0 0 26 26"><path d="M13 9 L12 25 L14 25 Z" fill="#e8ebe7" stroke="#6b7177" stroke-width=".8"/><g stroke="#6b7177" stroke-width=".8" fill="#ffffff"><path d="M13 9 L12.2 1 L13.8 1 Z"/><path d="M13 9 L5.4 13.6 L6.2 15 Z"/><path d="M13 9 L20.6 13.6 L19.8 15 Z"/></g><circle cx="13" cy="9" r="1.4" fill="#ffffff" stroke="#6b7177" stroke-width=".8"/></svg>`;
 const MILL_SVG = `<svg width="26" height="26" viewBox="0 0 26 26"><path d="M10 25 L11.5 12 L14.5 12 L16 25Z" fill="#6b5a44"/><g stroke="#3a2a1a" stroke-width="1.6"><line x1="13" y1="11" x2="4" y2="2"/><line x1="13" y1="11" x2="22" y2="2"/><line x1="13" y1="11" x2="4" y2="20"/><line x1="13" y1="11" x2="22" y2="20"/></g><g fill="#efe6d0" stroke="#3a2a1a" stroke-width=".6"><path d="M5 1.5 L9 5.5 L7 7.5 L3 3.5Z"/><path d="M21 1.5 L23 3.5 L19 7.5 L17 5.5Z"/><path d="M3 18.5 L7 14.5 L9 16.5 L5 20.5Z"/><path d="M19 14.5 L23 18.5 L21 20.5 L17 16.5Z"/></g><circle cx="13" cy="11" r="1.6" fill="#222"/></svg>`;
 const TOOLS = [
   { grp: 'Roads' },
@@ -1868,12 +2063,19 @@ const TOOLS = [
   { grp: 'Land' },
   { id: 'tree', mode: 'brush', ic: '🌳', lb: 'Trees', key: '6', tip: 'Paint trees (poplars near water). Trees block houses.' },
   { id: 'park', t: PARK, mode: 'rect', ic: '🌷', lb: 'Park', key: '7', tip: 'Drag a rectangle of park' },
+  { id: 'kas', t: KAS, mode: 'rect', ic: '🪴', lb: 'Greenhouses', key: '', tip: 'Kassen — drag a rectangle of glasshouses (Westland). They glow orange at night.' },
   { id: 'field', t: FIELD, mode: 'rect', ic: '🌾', lb: 'Farmland', key: '8', tip: 'Tulips, wheat, potatoes, maize…' },
   { id: 'sand', t: SAND, mode: 'rect', ic: '🏖️', lb: 'Dunes', key: '', tip: 'Beach & dunes — beach huts and parasols appear near the sea' },
   { id: 'erase', mode: 'rect', ic: '🚧', lb: 'Bulldoze', key: '0', tip: 'Drag a rectangle to clear' },
   { grp: 'Buildings' },
   { id: 'huis', mode: 'special', ic: '🏠', lb: 'House', key: '', tip: 'Place a single house anywhere, no road needed — a twee-onder-een-kap or a detached house with its own garden. R to rotate' },
   { id: 'kerk', mode: 'special', ic: '⛪', lb: 'Church', key: '', tip: 'Village church — R to rotate' },
+  { id: 'stolp', mode: 'special', ic: '🛖', lb: 'Stolp farm', key: '', tip: 'Stolpboerderij (3×3): North-Holland pyramid-roofed farm with a hooiberg in the yard. R to rotate' },
+  { id: 'hooiberg', mode: 'special', ic: '🌾', lb: 'Haystack', key: '', tip: 'Hooiberg: haystack under a roof on four poles' },
+  { id: 'watertoren', mode: 'special', ic: '🗼', lb: 'Water tower', key: '', tip: 'Watertoren (2×2): brick water tower with a slate roof' },
+  { id: 'klokkentoren', mode: 'special', ic: '🔔', lb: 'Bell tower', key: '', tip: 'Klokkentoren: clock shows the game time, the bells swing on every full hour. R to rotate' },
+  { id: 'snackkraam', mode: 'special', ic: '🍟', lb: 'Snack stall', key: '', tip: 'Haringkar or frietkraam — also on market squares. R to rotate' },
+  { id: 'windmolen', mode: 'special', ic: TURBINE_SVG, lb: 'Wind turbine', key: '', tip: 'Windmolen — click for one, drag for a row (one every 3 cells). Works on land, farmland, beach and water (offshore foundation). Turns into the wind.' },
   { id: 'molen', mode: 'special', ic: MILL_SVG, lb: 'Windmill', key: '', tip: 'Windmill — R to rotate' },
   { id: 'boerderij', mode: 'special', ic: '🐄', lb: 'Farm', key: '', tip: 'Farmhouse with barn — R to rotate' },
   { id: 'flat', mode: 'special', ic: '🏢', lb: 'Flats', key: '', tip: 'Portiekflat — R to rotate' },
@@ -1904,7 +2106,7 @@ function setTool(id) {
   updateGhost();
 }
 // ghost previews
-const ghostCols = { fire: 0xff5020, rail: 0x8f877d, sand: 0xf0d890, industrial: 0x9aa3ab, roundabout: 0xffd060, centre: 0xc07050, street: 0xffb070, main: 0x8899aa, lane: 0x999999, bike: 0xff6a50, water: 0x4aa8ff, park: 0x7ad35a, field: 0xe8c040, erase: 0xff3030, tree: 0x3fae3f };
+const ghostCols = { kas: 0xcfe8f0, fire: 0xff5020, rail: 0x8f877d, sand: 0xf0d890, industrial: 0x9aa3ab, roundabout: 0xffd060, centre: 0xc07050, street: 0xffb070, main: 0x8899aa, lane: 0x999999, bike: 0xff6a50, water: 0x4aa8ff, park: 0x7ad35a, field: 0xe8c040, erase: 0xff3030, tree: 0x3fae3f };
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
 const ghost = new THREE.InstancedMesh(new THREE.BoxGeometry(0.96, 0.08, 0.96), ghostMat, N * N); ghost.count = 0; ghost.frustumCulled = false; scene.add(ghost);
 const specGhostMat = new THREE.MeshBasicMaterial({ color: 0x40e060, transparent: true, opacity: 0.35, depthWrite: false });
@@ -1941,7 +2143,9 @@ function showGhost(cells, col) {
 }
 let hoverCell = null, drag = null;
 function specAnchor(c) { const [fw, fh] = fpOf(tool.id, specRot); return { i: c.i - Math.floor((fw - 1) / 2), j: c.j - Math.floor((fh - 1) / 2), fw, fh }; }
-function specValid(a) { for (let b = 0; b < a.fh; b++) for (let q = 0; q < a.fw; q++) { const i = a.i + q, j = a.j + b; if (!inb(i, j)) return false; const t = type[idx(i, j)]; if (!(t === GRASS || t === LOT || t === GARDEN || t === FIELD || t === PARK) || owner[idx(i, j)] >= 0) return false; } return true; }
+function specValid(a, kind = tool.id) { for (let b = 0; b < a.fh; b++) for (let q = 0; q < a.fw; q++) { const i = a.i + q, j = a.j + b; if (!inb(i, j)) return false; const t = type[idx(i, j)]; if (!specAllowed(kind, t) || owner[idx(i, j)] >= 0) return false; } return true; }
+// wind farm: drag a line and a turbine goes on every 3rd cell
+function turbineCells(a, b) { return lPath(a, b).filter((k, q) => q % 3 === 0 && specValid({ i: k % N, j: (k / N) | 0, fw: 1, fh: 1 }, 'windmolen')); }
 // Ctrl + click / drag: clear tiles back to grass (any tool), brush size follows Ctrl+scroll
 let eraseHeld = false;
 function setEraseHeld(v) { if (v === eraseHeld) return; eraseHeld = v; controls.mouseButtons.LEFT = v || !(tool.mode === 'none' || tool.mode === 'focus') ? -1 : THREE.MOUSE.ROTATE; updateGhost(); }
@@ -1959,7 +2163,8 @@ function updateGhost() {
   if (!hoverCell || tool.mode === 'none' || tool.mode === 'focus') { ghost.count = 0; hover.visible = false; return; }
   hover.visible = true; hover.position.set(wx(hoverCell.i), 0.05, wx(hoverCell.j));
   if (tool.mode === 'special') {
-    ghost.count = 0; const a = specAnchor(hoverCell), ok = specValid(a), h = tool.id === 'kerk' ? 2.5 : tool.id === 'flat' ? 1.6 : 1.2;
+    if (tool.id === 'windmolen' && drag && drag.turbine) { showGhost(turbineCells(drag.start, hoverCell)); return; }
+    ghost.count = 0; const a = specAnchor(hoverCell), ok = specValid(a), h = tool.id === 'kerk' ? 2.5 : tool.id === 'flat' ? 1.6 : tool.id === 'windmolen' ? 6.5 : tool.id === 'watertoren' ? 4.8 : tool.id === 'klokkentoren' ? 5.3 : tool.id === 'stolp' ? 1.6 : 1.2;
     specGhost.visible = true; specGhost.scale.set(a.fw, h, a.fh); specGhost.position.set(a.i - HALF + a.fw / 2, h / 2, a.j - HALF + a.fh / 2);
     specGhostMat.color.set(ok ? 0x40e060 : 0xff4040);
     const rot = specRot * Math.PI / 2, fx = Math.sin(rot), fz = Math.cos(rot), ext = (specRot % 2 ? a.fw : a.fh) / 2;
@@ -1994,6 +2199,7 @@ cv.addEventListener('pointerdown', e => {
   if (e.button !== 0 || tool.mode === 'none') return;
   const c = cellAt(e); if (!c) return;
   if (tool.mode === 'click') { if (tool.id === 'fire') igniteAt(c, true); else placeRoundabout(c); return; }
+  if (tool.mode === 'special' && tool.id === 'windmolen') { drag = { turbine: true, start: c, last: c }; updateGhost(); return; }
   if (tool.mode === 'special') {
     const a = specAnchor(c); if (!specValid(a)) { toast("Can't build there"); return; }
     pushUndo(); const cells = placeSpecial(tool.id, a.i, a.j, specRot, true); if (cells) afterChange(cells, null); return;
@@ -2020,6 +2226,13 @@ addEventListener('pointermove', e => {
   updateGhost();
 });
 addEventListener('pointerup', e => {
+  if (drag && drag.turbine && e.button === 0) {
+    const list = turbineCells(drag.start, hoverCell || drag.start); drag = null;
+    if (!list.length) { toast("Can't build there"); updateGhost(); return; }
+    pushUndo(); const all = [];
+    list.forEach((k, q) => { const cells = placeSpecial('windmolen', k % N, (k / N) | 0, 0, false); if (cells) { all.push(...cells); const sp = specials[specials.length - 1]; popIn(sp.obj, 0.8, 'pop', q * 0.12); } });
+    if (all.length) afterChange(all, null); toast(list.length > 1 ? list.length + ' wind turbines' : 'Wind turbine'); updateGhost(); return;
+  }
   if (drag && drag.erase && e.button === 0) { drag = null; setEraseHeld(e.ctrlKey || e.metaKey); updateGhost(); return; }
   if (e.button === 0 && focus.down && tool.mode === 'focus') { const d = Math.hypot(e.clientX - focus.down.x, e.clientY - focus.down.y); focus.down = null; if (d < 6) focusAt(e); return; }
   if (!drag || e.button !== 0) return;
@@ -2132,7 +2345,7 @@ function rushFactor(kind) {
   if (kind === 'ped') f *= (1 - 0.85 * env.rainE) * (0.25 + 0.75 * day);
   return Math.min(1.1, f * (1 - 0.6 * env.storm));
 }
-function nbrs(kind, k) { const i = k % N, j = (k / N) | 0, out = []; for (const [dx, dz] of DIRS) { const a = i + dx, c = j + dz; if (inb(a, c) && passable(kind, idx(a, c))) out.push(idx(a, c)); } return out; }
+function nbrs(kind, k) { const i = k % N, j = (k / N) | 0, out = []; for (let r = 0; r < 4; r++) { const [dx, dz] = DIRS[r], a = i + dx, c = j + dz; if (inb(a, c) && passable(kind, idx(a, c)) && roadLink(i, j, r)) out.push(idx(a, c)); } return out; }
 function spawnAgent(kind) {
   const list = kind === 'car' ? carCells : bikeCells; if (!list.length) return;
   for (let tries = 0; tries < 20; tries++) {
@@ -2787,6 +3000,13 @@ function presetVillage(big = false) {
     for (const i of [2, 5, 8, 11]) { site(i, 87, 1, 1); spec('huis', i, 87, 2); }
     for (const i of [52, 55, 61]) { site(i, 87, 1, 1); spec('huis', i, 87, 2); }
     rect(PARK, 43, 49, 47, 53); rect(PARK, 70, 52, 73, 56); // extra kickabout greens
+    rect(KAS, 1, 89, 15, 94);                                                            // kassen
+    site(59, 89, 3, 3); spec('stolp', 59, 89, 0); spec('hooiberg', 22, 82, 0);
+    site(10, 43, 2, 2); spec('watertoren', 10, 43, 0);
+    site(55, 21, 1, 1); spec('klokkentoren', 55, 21, 0);
+    spec('snackkraam', 51, 25, 0); spec('snackkraam', 53, 23, 2);
+    for (let i = 6; i <= 90; i += 7) if (i < 44 || i > 53) spec('windmolen', i, 2, 0);   // windpark in the river
+    for (let j = 18; j <= 72; j += 7) spec('windmolen', 92, j, 0);                      // row along the east dike
     document.getElementById('town').textContent = 'Groot-Vianen';
     fullRebuild(true); toast('Dutch town bigger'); return;
   }
@@ -2866,7 +3086,7 @@ function mocapStart() {
   for (const o of heldForTake.splice(0)) if (!o.parent) o.traverse(c => { if (c.geometry && !c.userData.shared) c.geometry.dispose(); });
   buildLog.clear(); spinLog.clear(); mocap.take = null;
   for (const o of scene.children) if (exportable(o)) buildLog.set(o.uuid, { obj: o, tAdd: 0, tRemove: null, anim: [] });
-  Object.assign(mocap, { on: true, withVideo: false, t0: performance.now(), cam: [], objs: new Map(), w: renderer.domElement.width, h: renderer.domElement.height, envS: [], traffic: $('mcTraffic').checked, ids: { ambulance: 0, ped: 0, player: 0, ball: 0, fire: 0, car: 0, cyclist: 0, cow: 0, sheep: 0, police: 0, train: 0 } });
+  Object.assign(mocap, { on: true, withVideo: false, t0: performance.now(), cam: [], objs: new Map(), w: renderer.domElement.width, h: renderer.domElement.height, envS: [], traffic: $('mcTraffic').checked, ids: { boat: 0, ambulance: 0, ped: 0, player: 0, ball: 0, fire: 0, car: 0, cyclist: 0, cow: 0, sheep: 0, police: 0, train: 0 } });
   $('mcRec').classList.add('on'); $('mcRec').textContent = '⏹ Stop motion (M)'; $('recpill').style.display = 'block';
 }
 function mocapStop() {
@@ -2894,6 +3114,8 @@ function mocapSample() {
   for (const a of agents) put(a.mesh, a.ambu ? 'ambulance' : a.fire ? 'fire' : a.police ? 'police' : a.kind === 'car' ? 'car' : a.kind === 'ped' ? 'ped' : 'cyclist');
   for (const p of sportsMeshes()) put(p.mesh, p.kind);
   for (const e of emerg) put(e.mesh, e.kind);
+  for (const bt of boats) put(bt.mesh, 'boat');
+  for (const sh of shoppers) put(sh.mesh, 'ped');
   for (const tr of trains) for (const m of tr.cars) put(m, 'train');
   for (const a of animals) put(a.mesh, a.kind || 'cow');
 }
@@ -3022,7 +3244,7 @@ function partTable() {
   if (PARTMAP) return PARTMAP;
   PARTMAP = new Map(); const c = new THREE.Color();
   const add = (part, hexes) => { for (const h of hexes) { c.set(h); const k = c.r.toFixed(3) + c.g.toFixed(3) + c.b.toFixed(3); if (!PARTMAP.has(k)) PARTMAP.set(k, part); } };
-  add('glass', [GLASS, 0x26313a, 0x2c3540, 0x3a5060, 0x9cb3bf]);
+  add('glass', [KAS_GLASS, GLASS, 0x26313a, 0x2c3540, 0x3a5060, 0x9cb3bf]);
   add('solar', [0x1d2a44]);
   add('door', DOORS);
   add('shopfront', SHOPFRAME); add('sign', SIGNS); add('awning', AWNINGS);
@@ -3250,7 +3472,7 @@ function exportUSD() {
   for (const o of T.objs) {
     if (o.s.length < 2) continue;
     const e = buildLog.get(o.uuid), keys = resample(o.s, fps, o.s[0][0], o.s[o.s.length - 1][0]); if (!keys.length || !e) continue;
-    w('    def Xform "' + ({ ambulance: 'vehicle_ambulance', ped: 'npc_pedestrian', player: 'npc_footballer', ball: 'prop_football', car: 'vehicle_car', fire: 'vehicle_firetruck', police: 'vehicle_police', train: 'vehicle_train', cyclist: 'vehicle_bike', cow: 'animal_cow', sheep: 'animal_sheep' }[o.kind] || o.kind) + '_' + o.name.split('_').pop() + '_GRP" {\n');
+    w('    def Xform "' + ({ boat: 'vehicle_boat', ambulance: 'vehicle_ambulance', ped: 'npc_pedestrian', player: 'npc_footballer', ball: 'prop_football', car: 'vehicle_car', fire: 'vehicle_firetruck', police: 'vehicle_police', train: 'vehicle_train', cyclist: 'vehicle_bike', cow: 'animal_cow', sheep: 'animal_sheep' }[o.kind] || o.kind) + '_' + o.name.split('_').pop() + '_GRP" {\n');
     const ks = []; if (keys[0].f > 1) ks.push('1: "invisible"', keys[0].f + ': "inherited"'); if (keys[keys.length - 1].f < N) { if (!ks.length) ks.push('1: "inherited"'); ks.push((keys[keys.length - 1].f + 1) + ': "invisible"'); }
     if (ks.length) w('      token visibility.timeSamples = { ' + ks.join(', ') + ' }\n');
     w('      double3 xformOp:translate.timeSamples = { ' + keys.map(k => k.f + ': ' + f3(k.t[0], k.t[1], k.t[2])).join(', ') + ' }\n');
@@ -4167,6 +4389,180 @@ function stepFires(dt) {
 }
 $('fireRisk').oninput = e => { fireRisk = +e.target.value; $('fireRiskV').textContent = fireRisk === 0 ? 'off' : fireRisk < 0.35 ? 'low' : fireRisk < 0.7 ? 'medium' : 'high'; };
 
+// ───────────────────────── drawbridges, clocks & bells, market crowds ─────────────────────────
+const drawState = new Map();
+let drawCells = [], drawSet = new Set();
+// ── boats: geometry (front = +Z)
+const BOAT_GEO = (() => { // zeilboot
+  const b = new B();
+  b.bb(0, -0.02, 0, 0.17, 0.07, 0.48, 0xf4f4f2); b.bb(0, 0.05, -0.02, 0.15, 0.012, 0.42, 0x8a6a4a); b.bb(0, -0.02, 0, 0.175, 0.02, 0.485, 0x1f3f8a);
+  b.bb(0, 0.06, -0.12, 0.1, 0.06, 0.14, 0xf4f4f2);
+  b.bb(0, 0.06, 0.06, 0.014, 0.78, 0.014, 0xe9e6df); b.box(0, 0.48, -0.02, 0.006, 0.6, 0.26, 0xf8f6f0, 0.18, 0, 0); b.bb(0, 0.84, 0.06, 0.004, 0.04, 0.06, 0xd8262e);
+  return b.mesh().geometry;
+})();
+function seated(b, x, z, top, ry = 0) { b.mat = new THREE.Matrix4().makeRotationY(ry).setPosition(x, -0.045, z); personParts(b, top, 0x2b3a5a, pick(SKINS, Math.abs(x * 7 + z * 13) % 1), pick(HAIRS, Math.abs(x * 3 + z * 5) % 1)); b.mat = null; }
+const SLOEP_GEO = (() => { // open sloep with friends on board
+  const b = new B();
+  b.bb(0, -0.02, 0, 0.15, 0.06, 0.36, 0xf4f4f2); b.bb(0, -0.02, 0, 0.152, 0.015, 0.362, 0x2a4f6a); b.bb(0, 0.035, 0, 0.13, 0.01, 0.32, 0x9a7650);
+  b.bb(0, 0.04, -0.13, 0.05, 0.05, 0.05, 0x6a6a6a); b.bb(0, 0.04, 0.16, 0.1, 0.015, 0.02, 0xf4f4f2);
+  seated(b, -0.035, 0.05, 0xd8262e); seated(b, 0.035, 0.05, 0x2f6b3a, Math.PI); seated(b, 0, -0.09, 0xf39c12);
+  return b.mesh().geometry;
+})();
+const ROW_GEO = (() => { // roeiboot
+  const b = new B();
+  b.bb(0, -0.02, 0, 0.11, 0.045, 0.27, 0x8a5a34); b.bb(0, 0.02, 0, 0.09, 0.008, 0.23, 0xa8784a); seated(b, 0, 0.01, 0x2e5e8a, Math.PI);
+  for (const sd of [-1, 1]) b.box(sd * 0.1, 0.035, 0.0, 0.14, 0.006, 0.012, 0xc9a46a, 0, 0, sd * 0.25);
+  return b.mesh().geometry;
+})();
+const CANOE_GEO = (() => { // kano
+  const b = new B();
+  b.bb(0, -0.015, 0, 0.065, 0.035, 0.32, 0xe0402a); b.bb(0, -0.015, 0.17, 0.04, 0.03, 0.04, 0xe0402a); b.bb(0, -0.015, -0.17, 0.04, 0.03, 0.04, 0xe0402a);
+  seated(b, 0, 0, 0xf5c518); b.box(0, 0.06, 0.02, 0.22, 0.006, 0.01, 0x222222, 0, 0, 0.35);
+  return b.mesh().geometry;
+})();
+const TOUR_GEO = (() => { // rondvaartboot: long, low, glass roof
+  const b = new B();
+  b.bb(0, -0.025, 0, 0.18, 0.06, 0.66, 0x1d2f5a); b.bb(0, 0.03, 0, 0.182, 0.012, 0.662, 0xf4f4f2);
+  b.bb(0, 0.04, -0.02, 0.15, 0.06, 0.5, GLASS); b.bb(0, 0.1, -0.02, 0.152, 0.008, 0.5, 0xcfe0ea);
+  b.bb(0, 0.04, 0.27, 0.12, 0.03, 0.06, 0xf4f4f2);
+  return b.mesh().geometry;
+})();
+const BOAT_KINDS = {
+  sail: { geo: () => BOAT_GEO, speed: 0.42, tall: true },
+  tour: { geo: () => TOUR_GEO, speed: 0.38, tall: false },
+  sloep: { geo: () => SLOEP_GEO, speed: 0.62, tall: false },
+  row: { geo: () => ROW_GEO, speed: 0.2, tall: false },
+  canoe: { geo: () => CANOE_GEO, speed: 0.3, tall: false },
+};
+const boats = [];
+let boatTimer = 0;
+const isWaterCell = k => type[k] === WATER || bridge[k] === 1;
+// low boats pass under every bridge; sailboats only through drawbridges (which open for them)
+function boatPass(kind, k) { if (!isWaterCell(k)) return false; return !(bridge[k] === 1 && BOAT_KINDS[kind].tall && !drawSet.has(k)); }
+function boatNbrs(kind, k) { const i = k % N, j = (k / N) | 0, out = []; for (const [dx, dz] of DIRS) { const a = i + dx, c = j + dz; if (inb(a, c) && boatPass(kind, idx(a, c))) out.push(idx(a, c)); } return out; }
+function boatNext(bt) {
+  const n = boatNbrs(bt.kind, bt.to).filter(k => k !== bt.from);
+  if (!n.length) return bt.from; // end of the canal: turn around
+  const st = bt.to + (bt.to - bt.from); if (n.includes(st) && Math.random() < 0.75) return st;
+  return pick(n, Math.random());
+}
+function boatAhead(bt) {
+  for (const o of boats) {
+    if (o === bt || o.leaving) continue;
+    if (o.from === bt.from && o.to === bt.to && o.t > bt.t && o.t - bt.t < 0.7) return true;
+    if (o.from === bt.to && o.to - o.from === bt.to - bt.from && (1 - bt.t) + o.t < 0.7) return true;
+  }
+  return false;
+}
+function spawnBoat(waterList) {
+  for (let tries = 0; tries < 20; tries++) {
+    const r = Math.random(), kind = r < 0.25 ? 'sail' : r < 0.55 ? 'sloep' : r < 0.7 ? 'row' : r < 0.85 ? 'canoe' : 'tour';
+    const k = waterList[(Math.random() * waterList.length) | 0]; if (!boatPass(kind, k)) continue;
+    const n = boatNbrs(kind, k); if (!n.length || boats.some(o => o.from === k || o.to === k)) continue;
+    const m = new THREE.Mesh(BOAT_KINDS[kind].geo(), MAT); m.castShadow = true; m.userData.agent = true; m.scale.setScalar(0.001); scene.add(m);
+    boats.push({ kind, from: k, to: pick(n, Math.random()), t: Math.random() * 0.5, v: 0, mesh: m, grow: 0, init: true, speed: BOAT_KINDS[kind].speed * (0.85 + Math.random() * 0.3) });
+    return;
+  }
+}
+function stepBoats(dt) {
+  boatTimer -= dt;
+  if (boatTimer <= 0) {
+    boatTimer = 1;
+    const water = []; for (let k = 0; k < N * N; k++) if (type[k] === WATER) water.push(k);
+    const h = env.hour, day = h > 7 && h < 21 ? 1 : 0.15;
+    const want = trafficOn ? Math.round(Math.min(40, water.length / 20) * day * (1 - 0.8 * env.rainE) * (1 - env.storm)) : 0;
+    const live = boats.filter(b => !b.leaving);
+    if (live.length < want && water.length) spawnBoat(water);
+    else if (live.length > want) { // leave quietly: the boat furthest from the view shrinks away
+      const T = controls.target; let far = null, fd = -1; for (const b of live) { const d = b.mesh.position.distanceToSquared(T); if (d > fd) { fd = d; far = b; } }
+      if (far) far.leaving = true;
+    }
+  }
+  for (let q = boats.length - 1; q >= 0; q--) {
+    const bt = boats[q];
+    if (!boatPass(bt.kind, bt.from) || !boatPass(bt.kind, bt.to)) bt.leaving = true;
+    bt.grow = bt.leaving ? bt.grow - dt : Math.min(1, bt.grow + dt);
+    if (bt.leaving && bt.grow <= 0) { scene.remove(bt.mesh); boats.splice(q, 1); continue; }
+    bt.mesh.scale.setScalar(Math.max(0.001, bt.grow));
+    if (bt.next === undefined && bt.t > 0.3) bt.next = boatNext(bt);
+    const tall = BOAT_KINDS[bt.kind].tall;
+    // a sailboat asks the drawbridge ahead (or the one it is under) to open, and waits until it is high enough
+    let stop = false;
+    for (const k of [bt.to, bt.from, bt.next]) { if (tall && k !== undefined && drawSet.has(k)) { const s = drawState.get(k); if (s) s.want = true; } }
+    if (tall && drawSet.has(bt.to)) { const s = drawState.get(bt.to); if ((!s || s.a < 1.1) && bt.t > 0.25 && bt.t < 0.6) stop = true; }
+    if (boatAhead(bt)) stop = true;
+    const turning = bt.next !== undefined && bt.next - bt.to !== bt.to - bt.from;
+    let tgt = stop ? 0 : bt.speed * (turning && bt.t > 0.45 ? 0.5 : 1) * (bt.next === bt.from && bt.t > 0.45 ? 0.4 : 1);
+    bt.v += (tgt - bt.v) * Math.min(1, dt * (tgt < bt.v ? 3 : 0.8));
+    bt.t += bt.v * dt;
+    while (bt.t >= 1) { bt.t -= 1; const nx = bt.next !== undefined && boatPass(bt.kind, bt.next) ? bt.next : boatNext(bt); bt.from = bt.to; bt.to = nx; bt.next = undefined; }
+    const fi = bt.from % N, fj = (bt.from / N) | 0, ti = bt.to % N, tj = (bt.to / N) | 0, dx = ti - fi, dz = tj - fj;
+    const cur = bt.t < 0.5 ? bt.from : bt.to, ci = cur % N, cj = (cur / N) | 0;
+    const wide = inb(ci - dz, cj + dx) && isWaterCell(idx(ci - dz, cj + dx)) && inb(ci + dz, cj - dx) && isWaterCell(idx(ci + dz, cj - dx));
+    const off = dx === 0 && dz === 0 ? 0 : wide ? 0.22 : 0.12;
+    _v.set(wx(fi) + dx * bt.t - dz * off, 0.012 + Math.sin(TIMEU.value * 2 + bt.from) * 0.005, wx(fj) + dz * bt.t + dx * off);
+    if (bt.init) { bt.mesh.position.copy(_v); bt.init = false; } else bt.mesh.position.lerp(_v, 1 - Math.exp(-dt * 4));
+    if (dx || dz) { let dr = Math.atan2(dx, dz) - bt.mesh.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); bt.mesh.rotation.y += dr * (1 - Math.exp(-dt * 2.5)); }
+    bt.mesh.rotation.z = Math.sin(TIMEU.value * 1.3 + q) * 0.025 * (tall ? 1.5 : 1);
+  }
+}
+// drawbridges open when a sailboat asks for it, stay up while boats need them, then close again
+function updateDrawbridges(dt) {
+  for (const k of drawCells) {
+    const o = cellObj[k], d = o && o.userData.draw; if (!d) continue;
+    let s = drawState.get(k); if (!s) { s = { phase: 'closed', a: 0, want: false, hold: 0 }; drawState.set(k, s); }
+    const want = s.want; s.want = false;
+    if (want) { s.hold = 2.5; if (s.phase === 'closed' || s.phase === 'closing') s.phase = 'opening'; }
+    else if (s.phase === 'open') { s.hold -= dt; if (s.hold <= 0) s.phase = 'closing'; }
+    if (s.phase === 'opening') { s.a = Math.min(1.2, s.a + dt * 0.45); if (s.a >= 1.2) s.phase = 'open'; }
+    else if (s.phase === 'closing') { s.a = Math.max(0, s.a - dt * 0.5); if (s.a <= 0) s.phase = 'closed'; }
+    if (s.phase !== 'closed') crossingClosed.add(k);
+    d.leaf.rotation.z = s.a; d.beams.rotation.z = s.a;
+  }
+}
+function updateClocks(dt) {
+  const h = ((env.hour % 24) + 24) % 24, hr = Math.floor(h);
+  for (const sp of specials) {
+    const c = sp.kind === 'klokkentoren' && sp.obj && sp.obj.userData.clock; if (!c) continue;
+    for (const [hh, mm] of c.hands) { hh.rotation.z = -((h % 12) / 12) * Math.PI * 2; mm.rotation.z = -(h % 1) * Math.PI * 2; }
+    if (c.lastHour !== null && hr !== c.lastHour) c.ring = 8; // full hour: the bells swing for a while
+    c.lastHour = hr;
+    if (c.ring > 0) c.ring -= dt;
+    c.bells.forEach((b, q) => { b.rotation.x = c.ring > 0 ? Math.sin(TIMEU.value * 4.2 + q * 1.7) * 0.7 * Math.min(1, c.ring / 3) : b.rotation.x * 0.9; });
+  }
+}
+// shoppers on market squares: stand at stalls, wander a little, go home in the evening and when it rains
+const shoppers = [];
+let shopTimer = 0;
+function stepMarket(dt) {
+  shopTimer -= dt;
+  if (shopTimer <= 0) {
+    shopTimer = 1.5;
+    const plaza = []; for (let k = 0; k < N * N; k++) if (type[k] === PLAZA) plaza.push(k);
+    const open = trafficOn && env.hour > 8 && env.hour < 18.5 && env.rainE < 0.5 && env.storm < 0.3;
+    const want = open ? Math.min(60, Math.round(plaza.length * 1.2)) : 0;
+    for (let q = shoppers.length - 1; q >= 0; q--) if (type[shoppers[q].k] !== PLAZA) { scene.remove(shoppers[q].mesh); shoppers.splice(q, 1); }
+    for (let n = 0; n < 4 && shoppers.length < want && plaza.length; n++) {
+      const k = plaza[(Math.random() * plaza.length) | 0], x = wx(k % N) + (Math.random() - 0.5) * 0.8, z = wx((k / N) | 0) + (Math.random() - 0.5) * 0.8;
+      const m = npcMesh(pick(agentGeos.ped, Math.random()), 0.95 + Math.random() * 0.1); m.position.set(x, 0.025, z); m.rotation.y = Math.random() * 6.28;
+      shoppers.push({ k, mesh: m, tx: x, tz: z, wait: Math.random() * 4 });
+    }
+    if (shoppers.length > want) { const s = shoppers.pop(); scene.remove(s.mesh); }
+  }
+  for (const s of shoppers) {
+    const p = s.mesh.position;
+    if (s.wait > 0) { s.wait -= dt; s.mesh.rotation.y += Math.sin(TIMEU.value * 0.7 + s.k) * dt * 0.2; continue; }
+    const dx = s.tx - p.x, dz = s.tz - p.z, d = Math.hypot(dx, dz);
+    if (d < 0.02) {
+      s.wait = 2 + Math.random() * 7;
+      for (let tries = 0; tries < 6; tries++) { const nx = p.x + (Math.random() - 0.5) * 1.2, nz = p.z + (Math.random() - 0.5) * 1.2, ci = Math.floor(nx + HALF), cj = Math.floor(nz + HALF); if (inb(ci, cj) && type[idx(ci, cj)] === PLAZA) { s.tx = nx; s.tz = nz; s.k = idx(ci, cj); break; } }
+      continue;
+    }
+    const st = Math.min(d, 0.13 * dt); p.x += dx / d * st; p.z += dz / d * st; p.y = 0.025 + Math.abs(Math.sin(TIMEU.value * 9 + s.k)) * 0.007;
+    let dr = Math.atan2(dx, dz) - s.mesh.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); s.mesh.rotation.y += dr * Math.min(1, dt * 5);
+  }
+}
+
 // ───────────────────────── lightning ─────────────────────────
 const bolt = { t: -1, timer: 3, mesh: null, power: 1 };
 const BOLT_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 3.3, 4), transparent: true, depthWrite: false, fog: false });
@@ -4242,7 +4638,7 @@ function setOutline(obj) {
   gh.userData = { noExport: true }; scene.add(gh); focus.ghost = gh;
   outline.selectedObjects = [gh]; outline.enabled = true; outline.edgeStrength = 5;
 }
-const FOCUS_NAMES = { landmark_ziekenhuis: 'Hospital', landmark_voetbal: 'Football pitch', landmark_huis: 'House', landmark_politie: 'Police station', landmark_brandweer: 'Fire station', bldg_terrace: 'Houses', bldg_mainroad: 'Shops & flats', bldg_centre: 'Shop', bldg_industrial: 'Factory hall', bldg_zaans: 'Zaans house', landmark_flat: 'Flats', landmark_kerk: 'Church', landmark_molen: 'Windmill', landmark_boerderij: 'Farm', landmark_stadhuis: 'Town hall', landmark_station: 'Station', landmark_school: 'High school', landmark_fabriek: 'Factory' };
+const FOCUS_NAMES = { landmark_stolp: 'Stolp farm', landmark_hooiberg: 'Haystack', landmark_watertoren: 'Water tower', landmark_klokkentoren: 'Bell tower', landmark_snackkraam: 'Snack stall', landmark_windmolen: 'Wind turbine', landmark_ziekenhuis: 'Hospital', landmark_voetbal: 'Football pitch', landmark_huis: 'House', landmark_politie: 'Police station', landmark_brandweer: 'Fire station', bldg_terrace: 'Houses', bldg_mainroad: 'Shops & flats', bldg_centre: 'Shop', bldg_industrial: 'Factory hall', bldg_zaans: 'Zaans house', landmark_flat: 'Flats', landmark_kerk: 'Church', landmark_molen: 'Windmill', landmark_boerderij: 'Farm', landmark_stadhuis: 'Town hall', landmark_station: 'Station', landmark_school: 'High school', landmark_fabriek: 'Factory' };
 function focusName(o) { const tag = (o.userData.tag || '') + ''; for (const k in FOCUS_NAMES) if (tag.startsWith(k)) return FOCUS_NAMES[k]; return tag ? tag.replace(/^(bldg|landmark)_/, '').split('_')[0] : 'Building'; }
 function focusCandidates() { const out = []; for (let k = 0; k < N * N; k++) if (houseObj[k]) out.push(houseObj[k]); for (const sp of specials) if (sp.obj) { sp.obj.userData.kind = sp.obj.userData.kind || sp.kind; out.push(sp.obj); } return out; }
 function vehicleMeshes() { const out = agents.filter(a => a.kind !== 'ped').map(a => a.mesh); for (const e of emerg) out.push(e.mesh); for (const tr of trains) out.push(...tr.cars); return out.filter(m => m.visible && m.parent === scene); }
@@ -4370,6 +4766,7 @@ function animate() {
     if (mocap.on) recAnim(a.obj);
   }
   stepOuts(dt);
+  for (const sp of specials) { const hd = sp.kind === 'windmolen' && sp.obj && sp.obj.userData.head; if (!hd) continue; let d = Math.atan2(-WIND.x, -WIND.z) - sp.obj.rotation.y - hd.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); hd.rotation.y += d * Math.min(1, dt * 0.4); }
   for (const s of spinners) s.rotation.z -= s.userData.spin * dt * (0.35 + env.windE * 2.6); // mills turn with the wind
   if (mocap.on) { const t = (performance.now() - mocap.t0) / 1000; for (const sp of spinners) { let l = spinLog.get(sp.uuid); if (!l) spinLog.set(sp.uuid, l = []); l.push([t, sp.rotation.z]); } }
   updateClouds(dt); stepBuild(dt);
@@ -4378,7 +4775,7 @@ function animate() {
   for (let q = agents.length - 1; q >= 0; q--) if (!stepAgent(agents[q], dt)) { scene.remove(agents[q].mesh); agents.splice(q, 1); }
   for (let q = animals.length - 1; q >= 0; q--) if (!stepAnimal(animals[q], dt)) { scene.remove(animals[q].mesh); animals.splice(q, 1); }
   for (let q = trains.length - 1; q >= 0; q--) if (!stepTrain(trains[q], dt)) { trains[q].cars.forEach(m => scene.remove(m)); trains.splice(q, 1); }
-  updateCrossings(dt); updateSignals();
+  updateCrossings(dt); updateSignals(); stepBoats(dt); updateDrawbridges(dt); updateClocks(dt); stepMarket(dt);
   { const ph = (performance.now() / 110 | 0) % 2; POLICE_A.emissiveIntensity = ph ? 5 : 0.05; POLICE_B.emissiveIntensity = ph ? 0.05 : 5; }
   // sun follows view
   const ext = THREE.MathUtils.clamp(dist * 0.85, 14, 75);
@@ -4410,7 +4807,7 @@ if (!started) { presetPolder(); undoStack.length = 0; }
 setInterval(() => { try { localStorage.setItem('polderstad-autosave', serializeAll()); } catch (e) { } }, 10000);
 animate();
 loadSavedAssets();
-window.__ps = { camera, controls, look, updateTilt, clouds, env, applyEnv, scene, renderer, composer, outline, get world() { return { type, N, HALF, MAIN, STREET, signalCells, emerg, fires, specials, carCells, roadPath, nearestCarCell, focus, vehicleMeshes, focusAt, exportTemplates }; }, sun, sun2, hTilt, vTilt, get agents() { return agents.length; }, get pending() { return pending.length; } };
+window.__ps = { camera, controls, look, updateTilt, clouds, env, applyEnv, scene, renderer, composer, outline, get world() { return { type, N, HALF, MAIN, STREET, signalCells, emerg, fires, specials, carCells, roadPath, nearestCarCell, focus, vehicleMeshes, focusAt, exportTemplates, drawState, drawCells: () => drawCells, boats }; }, sun, sun2, hTilt, vTilt, get agents() { return agents.length; }, get pending() { return pending.length; } };
 </script>
 <script>
   setTimeout(() => { if (!document.querySelector('canvas')) document.getElementById('err').style.display = 'flex'; }, 8000);
