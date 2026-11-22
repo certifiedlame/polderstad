@@ -1,0 +1,8 @@
+# Only the essentials are tracked: the game, the Houdini tools and this README.
+/*
+!/.gitignore
+!/README.md
+!/polderstad.html
+!/houdini_tools/
+houdini_tools/__pycache__/
+*.pyc

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shelfDocument>
+  <toolshelf name="polderstad" label="Polderstad">
+    <memberTool name="polderstad_import_scene"/>
+    <memberTool name="polderstad_import_usd"/>
+  </toolshelf>
+
+  <tool name="polderstad_import_scene" label="Import Polderstad Scene" icon="OBJ_geo">
+    <helpText><![CDATA[Imports a Polderstad "Houdini scene (no USD)" zip into /obj: town with build animation, traffic, keyframed camera, Redshift materials, sun and a Redshift ROP.]]></helpText>
+    <script scriptType="python"><![CDATA[
+import sys, importlib
+TOOLS = r"Y:/PROJECTS/2026/P030_2026_MooieNel_VAST/VAST_Videogame/04_Resources/VAST_Claude/houdini_tools"
+if TOOLS not in sys.path:
+    sys.path.insert(0, TOOLS)
+import polderstad_redshift, polderstad_houdini_scene
+importlib.reload(polderstad_redshift)
+importlib.reload(polderstad_houdini_scene)
+polderstad_houdini_scene.run()
+]]></script>
+  </tool>
+
+  <tool name="polderstad_import_usd" label="Import Polderstad USD (Solaris)" icon="LOP_materiallibrary">
+    <helpText><![CDATA[Imports a Polderstad .usda export into /stage and assigns one Redshift Standard Material per part.]]></helpText>
+    <script scriptType="python"><![CDATA[
+import sys, importlib
+TOOLS = r"Y:/PROJECTS/2026/P030_2026_MooieNel_VAST/VAST_Videogame/04_Resources/VAST_Claude/houdini_tools"
+if TOOLS not in sys.path:
+    sys.path.insert(0, TOOLS)
+import polderstad_redshift
+importlib.reload(polderstad_redshift)
+polderstad_redshift.run()
+]]></script>
+  </tool>
+</shelfDocument>
