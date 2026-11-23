@@ -37,6 +37,25 @@
   #toast.show{opacity:1}
   #recpill{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#e23b3b;color:#fff;font-weight:700;padding:4px 12px;border-radius:20px;display:none}
   body.hide-ui #ui{display:none}
+  #photoPanel{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);display:none;width:min(1000px,calc(100vw - 24px));padding:10px 14px;z-index:30}
+  body.photo #photoPanel{display:block} body.photo.photo-hide #photoPanel{display:none} body.photo #hint{display:none}
+  #photoPanel .ptitle{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:13px} #photoPanel .phint{font-size:11px;opacity:.65}
+  #photoPanel .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px 16px;margin:8px 0}
+  #photoPanel .pgrid label{font-size:12px;display:flex;flex-direction:column;gap:2px} #photoPanel .pgrid select{font-size:12px}
+  #photoPanel .btns{align-items:center} #photoPanel .plabel{font-size:12px;opacity:.75;margin-right:4px} #photoPanel .pdur{font-size:12px;display:flex;align-items:center;gap:6px}
+  #photoOverlay{position:fixed;inset:0;pointer-events:none;display:none;z-index:5} body.photo #photoOverlay{display:block}
+  #photoOverlay .pb{position:absolute;background:rgba(0,0,0,.8)} #photoGrid{position:absolute}
+  #photoList{position:fixed;right:12px;top:12px;width:290px;max-height:calc(100vh - 300px);min-height:120px;display:none;flex-direction:column;padding:10px 12px;z-index:30}
+  body.photo #photoList{display:flex} body.photo.photo-hide #photoList{display:none}
+  #photoList .phhead{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:6px} .phcount{opacity:.55;font-weight:600}
+  #phList{overflow-y:auto;display:flex;flex-direction:column;gap:4px} .phempty{font-size:12px;opacity:.65;line-height:1.4}
+  .phrow{display:grid;grid-template-columns:22px 1fr;grid-template-areas:"ic name" "ic meta" ". btns";gap:0 6px;padding:6px 7px;border-radius:10px;cursor:pointer;background:rgba(0,0,0,.04)}
+  .phrow:hover{background:rgba(0,0,0,.08)} .phrow.on{box-shadow:inset 0 0 0 2px var(--acc)}
+  .phic{grid-area:ic;font-size:15px} .phname{grid-area:name;font-weight:700;font-size:12.5px;outline:none} .phname[contenteditable=true]{background:#fff;border-radius:4px;padding:0 3px}
+  .phmeta{grid-area:meta;font-size:11px;opacity:.65} .phbtns{grid-area:btns;display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+  .btn.sm{padding:3px 7px;font-size:11.5px}
+  @media (max-width:700px){ #photoList{left:12px;right:12px;width:auto;max-height:30vh} }
+  #photoFlash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s;z-index:40}
   #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:18px;text-align:center;padding:20px}
   #assetModal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 60px);overflow-y:auto;padding:16px 18px;display:none;z-index:5}
   #assetModal.open{display:block}
@@ -91,6 +110,7 @@
     <div class="row"><label>Wind direction</label><input id="windDir" type="range" min="0" max="360" step="5" value="250"></div>
     <div class="btns"><button class="btn on" id="cloudShadow">Cloud shadows</button></div>
     <h4>Growth</h4>
+    <div class="row"><label>Birds <b id="birdsV">some</b></label><input id="birds" type="range" min="0" max="1" step="0.05" value="0.5"></div>
     <div class="row"><label>Incidents <b id="fireRiskV">low</b></label><input id="fireRisk" type="range" min="0" max="1" step="0.05" value="0.25"></div>
     <div class="row"><label>Houses / sec</label><input id="grow" type="range" min="1" max="60" step="1" value="10"></div>
     <div class="btns"><button class="btn" id="growToggle">⏸ Pause growth</button><button class="btn on" id="trafficToggle">🚲 Traffic</button></div>
@@ -100,22 +120,27 @@
     <div class="row"><label>Render quality</label><select id="quality"><option value="auto" selected>Auto (smooth)</option><option value="1">High</option><option value="0.75">Medium</option><option value="0.55">Low</option></select></div>
     <div class="row"><label>Orbit speed</label><input id="orbit" type="range" min="0.05" max="2" step="0.05" value="0.35"></div>
     <label class="chk"><input type="checkbox" id="focusOrbit" checked> Orbit around a focused building</label>
-    <div class="btns"><button class="btn" id="iso" title="Orthographic isometric view: fixed 35° angle, Q/E turn 90°, wheel zooms">◇ Isometric (I)</button><button class="btn" id="cine">🎥 Orbit (C)</button><button class="btn" id="topdown">⬇ Top</button><button class="btn" id="hideui">Hide UI (H)</button></div>
+    <div class="btns"><button class="btn rec" id="photoBtn" title="Fly the camera yourself and frame shots: focal length, roll, frames, grid, photos and a start→end camera move">📸 Photo mode (O)</button><button class="btn" id="iso" title="Orthographic isometric view: fixed 35° angle, Q/E turn 90°, wheel zooms">◇ Isometric (I)</button><button class="btn" id="cine">🎥 Orbit (C)</button><button class="btn" id="topdown">⬇ Top</button><button class="btn" id="hideui">Hide UI (H)</button></div>
+    <h4>Cinematic shots</h4>
+    <div class="btns" id="shotBtns"></div>
+    <div class="row"><label>Shot length <b id="shotDurV">12 s</b></label><input id="shotDur" type="range" min="4" max="60" step="1" value="12"></div>
+    <label class="chk"><input type="checkbox" id="shotVideo"> Record video while the shot plays</label>
+    <label class="chk"><input type="checkbox" id="shotTake"> Record motion take (for the Houdini export)</label>
     <h4>Capture</h4>
     <div class="btns"><button class="btn" id="shot">📷 PNG (P)</button><button class="btn" id="shot2">📷 2× PNG</button><button class="btn rec" id="rec">⏺ Record (V)</button></div>
-    <h4>Motion export · Maya / Houdini</h4>
+    <h4>Motion export · Houdini</h4>
     <div class="row"><label>Frame rate</label><select id="mcFps" autocomplete="off"><option value="24">24 fps (film)</option><option value="25" selected>25 fps (PAL)</option><option value="30">30 fps</option><option value="50">50 fps</option><option value="60">60 fps</option></select></div>
     <label class="chk"><input type="checkbox" id="mcWithVideo" checked> Record motion along with video</label>
     <label class="chk"><input type="checkbox" id="mcTraffic" checked> Include cars, cyclists &amp; animals</label>
-    <div class="btns"><button class="btn rec" id="mcRec">⏺ Motion only (M)</button><button class="btn" id="mcMaya" disabled>Maya .ma</button><button class="btn" id="mcHou" disabled>Houdini .py</button><button class="btn" id="mcUsd" disabled title="Whole town + build animation + camera + traffic in one USD file (Houdini Solaris / Maya USD)">🎬 Animated scene .usda</button><button class="btn" id="mcHouScene" disabled title="Native Houdini geometry + keyframed camera + traffic, for the classic /obj importer (no USD)">🏠 Houdini scene (no USD)</button><button class="btn" id="mcObj">📦 Scene .obj</button></div>
+    <label class="chk"><input type="checkbox" id="mcFx" checked> Include birds, clouds &amp; weather (separate zip)</label>
+    <div class="btns"><button class="btn rec" id="mcRec">⏺ Motion only (M)</button><button class="btn" id="mcHouScene" disabled title="Town + build animation + traffic + keyframed camera as native Houdini geometry. In Houdini: shelf Polderstad > Import Polderstad Scene"><b>🏠 Houdini scene .zip</b></button><button class="btn" id="mcFxZip" disabled title="Birds and clouds as per-frame point caches (orient, pscale, wing flap…) + cloud shapes + rain / wind / storm / lightning channels. In Houdini: shelf Polderstad > Import Polderstad FX">🐦 Birds, clouds &amp; weather .zip</button><button class="btn" id="mcHou" disabled title="Only the camera (+ traffic nulls) as a Houdini Python script">🎥 Camera .py</button><button class="btn" id="mcObj" title="The town as it is right now, static, for any 3D app">📦 Scene .obj</button></div>
     <div class="files" id="mcInfo">No take recorded yet</div>
     <h4>Build-up animation</h4>
     <div class="row"><label>Duration <b id="bfDurV">20 s</b></label><input id="bfDur" type="range" min="4" max="90" step="1" value="20"></div>
     <div class="row"><label>Order</label><select id="bfStyle" autocomplete="off"><option value="roads" selected>Along the roads</option><option value="ripple">Ripple from start point</option><option value="layers">Roads → buildings → trees</option><option value="scatter">Scattered</option></select></div>
     <label class="chk"><input type="checkbox" id="bfOrbit"> Orbit camera while building</label>
     <label class="chk"><input type="checkbox" id="bfVideo"> Record video (webm)</label>
-    <label class="chk"><input type="checkbox" id="bfHou"> Export Houdini scene when done (no USD)</label>
-    <label class="chk"><input type="checkbox" id="bfUsd"> Export animated USD when done</label>
+    <label class="chk"><input type="checkbox" id="bfHou" checked> Export Houdini scene when done</label>
     <div class="btns"><button class="btn" id="bfPick">📍 Pick start point</button><button class="btn rec" id="bfGo">▶ Build it up (B)</button></div>
     <div class="files" id="bfInfo">Start point: town centre</div>
     <h4>Map</h4>
@@ -152,6 +177,24 @@
   </div>
   <div id="hint" class="panel"><b>Left-drag</b> draw · <b>Shift+drag</b> straight road · <b>Right-drag</b> rotate · <b>Middle / Shift+Right</b> pan · <b>WASD</b> move · <b>Q/E</b> turn · <b>Wheel</b> zoom · <b>R</b> rotate building · <b>Ctrl+scroll</b> brush size · <b>Ctrl+click</b> erase · <b>Ctrl+Z</b> undo</div>
   <div id="toast" class="panel"></div>
+<div id="photoOverlay"><div class="pb pb-t"></div><div class="pb pb-b"></div><div class="pb pb-l"></div><div class="pb pb-r"></div><svg id="photoGrid"></svg></div>
+<div id="photoFlash"></div>
+<div id="photoPanel" class="panel">
+  <div class="ptitle"><b>📸 Photo mode</b><span class="phint">WASD move · Q/E down/up · Shift faster · drag look · scroll zoom · Z/X roll · R level · click = focus · C/F9 smooth cam · G grid · P pause · K save view · Enter photo · V record flight · H hide · Esc exit</span></div>
+  <div class="pgrid">
+    <label>Focal length <b id="phFocalV">35 mm</b><input id="phFocal" type="range" min="12" max="200" step="1" value="35"></label>
+    <label>Roll (Z / X) <b id="phRollV">0°</b><input id="phRoll" type="range" min="-45" max="45" step="0.5" value="0"></label>
+    <label>Smooth camera <b id="phSmoothAmtV">off</b><input id="phSmoothAmt" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+    <label>Blur (tilt-shift) <b id="phBlurV">6</b><input id="phBlur" type="range" min="0" max="16" step="0.5" value="6"></label>
+    <label>Exposure <b id="phEvV">0 EV</b><input id="phEv" type="range" min="-2" max="2" step="0.1" value="0"></label>
+    <label>Time of day <b id="phTimeV"></b><input id="phTime" type="range" min="0" max="24" step="0.05" value="14"></label>
+    <label>Frame<select id="phAspect"><option value="0">Screen</option><option value="1.7778" selected>16:9</option><option value="2.39">2.39:1 cinema</option><option value="1.3333">4:3</option><option value="1">1:1</option><option value="0.8">4:5</option><option value="0.5625">9:16</option></select></label>
+  </div>
+  <div class="btns"><button class="btn" id="phSmooth" title="Heavy, floaty camera for smooth handheld-style shots (like F9 in Minecraft). Strength = Smooth camera slider">〰 Smooth camera (C)</button><button class="btn" id="phGrid">▦ Grid (G)</button><button class="btn" id="phPause">⏸ Pause world (P)</button><button class="btn" id="phView" title="Bookmark this camera in the list">📌 Save view (K)</button><button class="btn rec" id="phShot">📷 Take photo (Enter)</button><button class="btn" id="phShot2">📷 2× photo</button><button class="btn" id="phExit">✕ Exit (Esc)</button></div>
+  <div class="btns"><span class="plabel">Camera move:</span><button class="btn" id="phA">① Set start</button><button class="btn" id="phB">② Set end</button><button class="btn" id="phPlay">▶ Play move (3)</button><span class="pdur">Length <b id="phDurV">8 s</b><input id="phDur" type="range" min="2" max="40" step="1" value="8"></span><span class="pdur">Motion <select id="phEase"><option value="inout" selected>Ease in &amp; out</option><option value="gentle">Gentle ease</option><option value="soft">Linear, soft start &amp; end</option><option value="linear">Linear (constant speed)</option><option value="in">Ease in (slow start)</option><option value="out">Ease out (slow stop)</option></select></span></div>
+  <div class="btns"><span class="plabel">Recording:</span><label class="chk"><input type="checkbox" id="phRecV"> video</label><label class="chk"><input type="checkbox" id="phRecT"> motion take</label><label class="chk" title="Download the Houdini scene zip automatically after every motion take"><input type="checkbox" id="phZip" checked> auto-save Houdini .zip</label><button class="btn rec" id="phFly" title="Record while you fly the camera yourself">⏺ Record flight (V)</button></div>
+</div>
+<div id="photoList" class="panel"><div class="phhead"><b>Takes &amp; poses <span id="phListN" class="phcount"></span></b><button class="btn sm" id="phClear" title="Empty the list">Clear</button></div><div id="phList"></div></div>
   <div id="recpill">● REC</div>
 </div>
 
@@ -177,6 +220,7 @@ import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 const N = 96, HALF = N / 2;
 const GRASS = 0, STREET = 1, MAIN = 2, LANE = 3, BIKE = 4, WATER = 5, PARK = 6, FIELD = 7, LOT = 8, GARDEN = 9, SPECIAL = 10, CENTRE = 11, PLAZA = 12, INDUSTRIAL = 13, RBISLAND = 14, SAND = 15, RAIL = 16; // SAND = beach / dunes, RAIL = railway (on a road cell a level crossing is bridge[k] = 2)
 let townStyle = 'default'; // 'default' | 'zaans' (green timber Zaanse houses) | 'zeeuws' (Zeeland plaster & yellow brick) // INDUSTRIAL = bedrijventerrein road, RBISLAND = roundabout centre island // CENTRE = brick shopping street (winkelstraat), PLAZA = market square (markt)
+const LAWN = 18; // clean mown city grass: no furniture, never built on
 const KAS = 17, KAS_GLASS = 0x8fa3ab; // kassen (greenhouses) + their glass colour (glow marker)
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 let type = new Uint8Array(N * N), bridge = new Uint8Array(N * N), tree = new Uint8Array(N * N);
@@ -396,7 +440,7 @@ class B {
     const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = true; return m;
   }
 }
-const heldForTake = []; // removed while recording: kept alive so the USD export can still write them
+const heldForTake = []; // removed while recording: kept alive so the Houdini export can still write them
 function disposeObj(o) { if (typeof mocap !== 'undefined' && (mocap.on || mocap.take) && o.uuid && buildLog.has(o.uuid)) { heldForTake.push(o); return; } o.traverse(c => { if (c.geometry && !c.userData.shared) c.geometry.dispose(); }); }
 const buildLog = new Map(); // uuid → { obj, tAdd, tRemove, anim: [[t, sx, sy, sz, y]] } for the current take
 const spinLog = new Map();  // uuid → [[t, rotZ]] windmill sails
@@ -923,6 +967,8 @@ function kasTile(i, j) {
   if (!kn[0] && !kn[1] && hash(i, j, 900) < 0.5) { b.cyl(0.3, 0, 0.3, 0.04, 0.05, 1.2, 8, 0xc9cdd0); b.cyl(-0.2, 0, 0.3, 0.12, 0.12, 0.3, 12, 0x9da3a8); } // boiler chimney + water silo
   return b.mesh(MAT, true);
 }
+// gazon: smooth, freshly mown city grass with faint mowing stripes, nothing on it
+function lawnTile(i, j) { const b = new B(); b.bb(0, -0.04, 0, 1, 0.048, 1, j % 2 ? 0x6aa64b : 0x64a046); return b.mesh(MAT, true); }
 function fieldTile(i, j) {
   const b = new B(), ri = Math.floor(i / 7), rj = Math.floor(j / 7);
   const crop = Math.floor(hash(ri, rj, 61) * 5), alongX = hash(ri, rj, 62) < 0.5;
@@ -1786,7 +1832,7 @@ function bakeStep(dt) {
   bakeClock += dt;
   for (let q = 0; q < chunks.length; q++) { const c = chunks[q]; if (buildFx.active && buildFx.chunkPending[q] > 0) continue; if (c.dirty && bakeClock - c.dirtyAt > 1.2) { bakeChunk(q); return; } }
 }
-const TILE_TAG = { [KAS]: 'land_greenhouse', [STREET]: 'road_street', [MAIN]: 'road_main', [LANE]: 'road_lane', [BIKE]: 'path_bike', [WATER]: 'water_ditch', [PARK]: 'land_park', [FIELD]: 'land_field', [CENTRE]: 'road_shopstreet', [PLAZA]: 'square_market', [INDUSTRIAL]: 'road_industrial', [RBISLAND]: 'road_roundabout', [SAND]: 'land_dune', [RAIL]: 'rail_track' };
+const TILE_TAG = { [LAWN]: 'land_lawn', [KAS]: 'land_greenhouse', [STREET]: 'road_street', [MAIN]: 'road_main', [LANE]: 'road_lane', [BIKE]: 'path_bike', [WATER]: 'water_ditch', [PARK]: 'land_park', [FIELD]: 'land_field', [CENTRE]: 'road_shopstreet', [PLAZA]: 'square_market', [INDUSTRIAL]: 'road_industrial', [RBISLAND]: 'road_roundabout', [SAND]: 'land_dune', [RAIL]: 'rail_track' };
 function tagFor(arr, k) {
   if (arr === cellObj) return (TILE_TAG[type[k]] || 'tile') + (bridge[k] === 1 ? '_bridge' : bridge[k] === 2 ? '_crossing' : '');
   if (arr === treeObj) return 'tree';
@@ -1845,6 +1891,7 @@ function buildCellVisual(k, anim = false, delay = 0) {
   else if (t === PARK) o = parkTile(i, j);
   else if (t === FIELD) o = fieldTile(i, j);
   else if (t === KAS) o = kasTile(i, j);
+  else if (t === LAWN) o = lawnTile(i, j);
   else if (t === SAND) o = sandTile(i, j);
   else if (t === RAIL) o = railTile(i, j);
   if (o && bridge[k] === 2 && isCarRoad(t)) addCrossing(o, i, j);
@@ -1854,7 +1901,7 @@ function buildCellVisual(k, anim = false, delay = 0) {
 function nearWater(i, j) { for (let r = 0; r < 4; r++) { const a = i + DIRS[r][0] * 1, c = j + DIRS[r][1]; if (inb(a, c) && type[idx(a, c)] === WATER) return true; } return false; }
 function buildTreeVisual(k, anim = false) {
   const i = k % N, j = (k / N) | 0;
-  if (!tree[k] || !(type[k] === GRASS || type[k] === PARK)) { setObj(treeObj, k, null); return; }
+  if (!tree[k] || !(type[k] === GRASS || type[k] === PARK || type[k] === LAWN)) { setObj(treeObj, k, null); return; }
   const h = hash(i, j, 101), w = nearWater(i, j);
   if (useCustom('tree', hash(i, j, 106))) {
     const g = new THREE.Group(), inst = customInstance('tree', hash(i, j, 107));
@@ -1946,7 +1993,7 @@ function afterChangeInner(cells, origin, tileAnim, changed) {
 }
 let derivedDirty = false;
 const keepGround = (kind, t) => (kind === 'windmolen' && (t === WATER || t === SAND || t === FIELD)) || (kind === 'snackkraam' && t === PLAZA);
-function specAllowed(kind, t) { return t === GRASS || t === LOT || t === GARDEN || t === FIELD || t === PARK || (kind === 'windmolen' && (t === WATER || t === SAND)) || (kind === 'snackkraam' && t === PLAZA); }
+function specAllowed(kind, t) { return t === LAWN || t === GRASS || t === LOT || t === GARDEN || t === FIELD || t === PARK || (kind === 'windmolen' && (t === WATER || t === SAND)) || (kind === 'snackkraam' && t === PLAZA); }
 function placeSpecial(kind, i0, j0, rot, anim) {
   const [fw, fh] = fpOf(kind, rot), cells = [];
   for (let b = 0; b < fh; b++) for (let a = 0; a < fw; a++) {
@@ -2062,6 +2109,7 @@ const TOOLS = [
   { id: 'water', t: WATER, mode: 'line', ic: '💧', lb: 'Ditch', key: '5', tip: 'Sloot / canal — roads crossing it become bridges' },
   { grp: 'Land' },
   { id: 'tree', mode: 'brush', ic: '🌳', lb: 'Trees', key: '6', tip: 'Paint trees (poplars near water). Trees block houses.' },
+  { id: 'lawn', t: LAWN, mode: 'rect', ic: '🟩', lb: 'Lawn', key: '', tip: 'Clean mown city grass (gazon) — drag a rectangle. Nothing is placed on it and houses never grow on it; you can still paint trees.' },
   { id: 'park', t: PARK, mode: 'rect', ic: '🌷', lb: 'Park', key: '7', tip: 'Drag a rectangle of park' },
   { id: 'kas', t: KAS, mode: 'rect', ic: '🪴', lb: 'Greenhouses', key: '', tip: 'Kassen — drag a rectangle of glasshouses (Westland). They glow orange at night.' },
   { id: 'field', t: FIELD, mode: 'rect', ic: '🌾', lb: 'Farmland', key: '8', tip: 'Tulips, wheat, potatoes, maize…' },
@@ -2106,7 +2154,7 @@ function setTool(id) {
   updateGhost();
 }
 // ghost previews
-const ghostCols = { kas: 0xcfe8f0, fire: 0xff5020, rail: 0x8f877d, sand: 0xf0d890, industrial: 0x9aa3ab, roundabout: 0xffd060, centre: 0xc07050, street: 0xffb070, main: 0x8899aa, lane: 0x999999, bike: 0xff6a50, water: 0x4aa8ff, park: 0x7ad35a, field: 0xe8c040, erase: 0xff3030, tree: 0x3fae3f };
+const ghostCols = { lawn: 0x7cd35a, kas: 0xcfe8f0, fire: 0xff5020, rail: 0x8f877d, sand: 0xf0d890, industrial: 0x9aa3ab, roundabout: 0xffd060, centre: 0xc07050, street: 0xffb070, main: 0x8899aa, lane: 0x999999, bike: 0xff6a50, water: 0x4aa8ff, park: 0x7ad35a, field: 0xe8c040, erase: 0xff3030, tree: 0x3fae3f };
 const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
 const ghost = new THREE.InstancedMesh(new THREE.BoxGeometry(0.96, 0.08, 0.96), ghostMat, N * N); ghost.count = 0; ghost.frustumCulled = false; scene.add(ghost);
 const specGhostMat = new THREE.MeshBasicMaterial({ color: 0x40e060, transparent: true, opacity: 0.35, depthWrite: false });
@@ -2186,7 +2234,7 @@ function cellAt(ev) {
 }
 function paintTree(c) {
   const k = idx(c.i, c.j); if (tree[k] || owner[k] >= 0) return;
-  const t = type[k]; if (!(t === GRASS || t === PARK || t === LOT || t === GARDEN)) return;
+  const t = type[k]; if (!(t === GRASS || t === PARK || t === LAWN || t === LOT || t === GARDEN)) return;
   tree[k] = 1; if (t === LOT || t === GARDEN) type[k] = GRASS; afterChange([k], null); buildTreeVisual(k, true);
 }
 const cv = renderer.domElement;
@@ -2246,7 +2294,7 @@ addEventListener('pointerup', e => {
       for (const k of cells) { type[k] = GRASS; bridge[k] = 0; tree[k] = 0; all.push(k); }
       afterChange(all, start);
     } else {
-      for (const k of cells) { const t = type[k]; if ((t === GRASS || t === LOT || t === GARDEN || t === FIELD || t === PARK) && owner[k] < 0) { type[k] = tool.t; all.push(k); } }
+      for (const k of cells) { const t = type[k]; if ((t === GRASS || t === LOT || t === GARDEN || t === FIELD || t === PARK || t === LAWN || t === KAS) && owner[k] < 0) { type[k] = tool.t; all.push(k); } }
       afterChange(all, start, new Map(all.map(k => [k, Math.hypot(k % N - start.i, ((k / N) | 0) - start.j) * 0.04])));
     }
   }
@@ -2542,6 +2590,7 @@ const CLOUD_N = 150, CLOUD_SPAN = 280, WIND = new THREE.Vector3(1, 0, 0.35).norm
 const clouds = [];
 const CLOUD_PROXY_MAT = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 const cloudMatBase = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, emissive: 0xdde6ef, emissiveIntensity: 0.05, transparent: true, envMapIntensity: 0.7, fog: false });
+cloudMatBase.name = 'cloud';
 function buildCloud(seed) {
   const b = new B(), v = 2.6 + hash(seed, 3) * 1.2, rx = 3 + Math.floor(hash(seed, 1) * 6), rz = 2 + Math.floor(hash(seed, 2) * 4);
   for (let i = -rx - 1; i <= rx + 1; i++) for (let j = -rz - 1; j <= rz + 1; j++) {
@@ -2587,12 +2636,12 @@ function updateClouds(dt) {
     if (m.position.x - T.x > h) m.position.x -= CLOUD_SPAN; if (m.position.x - T.x < -h) m.position.x += CLOUD_SPAN;
     if (m.position.z - T.z > h) m.position.z -= CLOUD_SPAN; if (m.position.z - T.z < -h) m.position.z += CLOUD_SPAN;
     if (c.proxy) { c.proxy.visible = q < n; c.proxy.position.copy(m.position); c.proxy.rotation.copy(m.rotation); c.proxy.scale.copy(m.scale); }
-    if (q >= n) { m.visible = false; continue; }
+    c.on = q < n; if (q >= n) { m.visible = false; continue; }
     const edge = THREE.MathUtils.clamp((h - Math.max(Math.abs(m.position.x - T.x), Math.abs(m.position.z - T.z))) / 40, 0, 1);
     // fade out smoothly when the camera gets close, so you can fly through
     const d = camera.position.distanceTo(m.position) - c.r;
     const op = THREE.MathUtils.clamp((d + c.r * 0.3) / 14, 0, 1) * edge;
-    m.visible = op > 0.02; m.material.opacity = op;
+    m.visible = op > 0.02; m.material.opacity = op; c.edge = edge;
   }
 }
 
@@ -3068,10 +3117,10 @@ function toggleRec() {
   const s0 = rec.onstop; rec.onstop = () => { s0(); if (mocap.on && mocap.withVideo) mocapStop(); };
 }
 
-// ───────────────────────── motion capture → Maya / Houdini ─────────────────────────
+// ───────────────────────── motion capture → Houdini ─────────────────────────
 // Samples the camera (and optionally every car, cyclist, cow, sheep) each rendered frame with real timestamps,
 // then resamples to a fixed frame rate on export so the take lines up with the webm recorded at the same time.
-// Units: metres (1 grid cell = 9.5 m), Y-up, right-handed — same as Maya and Houdini. Rotate order: ZXY (standard camera order).
+// Units: metres (1 grid cell = 9.5 m), Y-up, right-handed — same as Houdini. Rotate order: ZXY (standard camera order).
 const M_PER_UNIT = 9.5;
 const mocap = { on: false, withVideo: false, t0: 0, cam: [], objs: new Map(), take: null };
 const takeTime = () => (performance.now() - mocap.t0) / 1000;
@@ -3086,7 +3135,7 @@ function mocapStart() {
   for (const o of heldForTake.splice(0)) if (!o.parent) o.traverse(c => { if (c.geometry && !c.userData.shared) c.geometry.dispose(); });
   buildLog.clear(); spinLog.clear(); mocap.take = null;
   for (const o of scene.children) if (exportable(o)) buildLog.set(o.uuid, { obj: o, tAdd: 0, tRemove: null, anim: [] });
-  Object.assign(mocap, { on: true, withVideo: false, t0: performance.now(), cam: [], objs: new Map(), w: renderer.domElement.width, h: renderer.domElement.height, envS: [], traffic: $('mcTraffic').checked, ids: { boat: 0, ambulance: 0, ped: 0, player: 0, ball: 0, fire: 0, car: 0, cyclist: 0, cow: 0, sheep: 0, police: 0, train: 0 } });
+  Object.assign(mocap, { on: true, withVideo: false, t0: performance.now(), cam: [], objs: new Map(), w: renderer.domElement.width, h: renderer.domElement.height, envS: [], traffic: $('mcTraffic').checked, fx: $('mcFx').checked, fxBirds: [], fxClouds: [], fxEnv: [], fxBolts: [], ids: { boat: 0, ambulance: 0, ped: 0, player: 0, ball: 0, fire: 0, car: 0, cyclist: 0, cow: 0, sheep: 0, police: 0, train: 0 } });
   $('mcRec').classList.add('on'); $('mcRec').textContent = '⏹ Stop motion (M)'; $('recpill').style.display = 'block';
 }
 function mocapStop() {
@@ -3094,17 +3143,25 @@ function mocapStop() {
   const dur = mocap.cam.length ? mocap.cam[mocap.cam.length - 1][0] : 0;
   if (dur < 0.1) { toast('Take too short'); return; }
   mocap.take = { cam: mocap.cam, objs: [...mocap.objs.values()], dur, w: mocap.w, h: mocap.h, town: ($('town').textContent || 'polderstad').trim() };
-  $('mcMaya').disabled = $('mcHou').disabled = $('mcUsd').disabled = $('mcHouScene').disabled = false;
+  $('mcHou').disabled = $('mcHouScene').disabled = false;
+  mocap.take.fx = mocap.fx ? { birds: mocap.fxBirds, clouds: mocap.fxClouds, env: mocap.fxEnv, bolts: mocap.fxBolts } : null;
+  $('mcFxZip').disabled = !mocap.take.fx;
   mocap.take.env = { dir: env.dir.clone(), sun: sun.color.clone(), sunI: sun.intensity + sun2.intensity, sky: skyMat.uniforms.top.value.clone() };
   { const E = mocap.envS || []; const moved = E.length > 1 && E.some(e => Math.abs(e[1] - E[0][1]) + Math.abs(e[2] - E[0][2]) + Math.abs(e[7] - E[0][7]) > 1e-3); mocap.take.envS = moved ? E : null; }
   $('mcInfo').textContent = `Take: ${dur.toFixed(1)} s · camera${mocap.take.objs.length ? ` + ${mocap.take.objs.length} moving objects` : ''}`;
-  toast('Motion take ready — export for Maya or Houdini');
+  toast('Motion take ready — 🏠 Houdini scene .zip to export');
 }
 function mocapSample() {
   const t = (performance.now() - mocap.t0) / 1000;
   const p = camera.position, q = camera.quaternion;
   mocap.cam.push([t, p.x, p.y, p.z, q.x, q.y, q.z, q.w, camera.isOrthographicCamera ? 32 : camera.fov, camera.isOrthographicCamera ? (orthoCam.top - orthoCam.bottom) / orthoCam.zoom : 0]);
   mocap.envS.push([t, env.dir.x, env.dir.y, env.dir.z, sun.color.r, sun.color.g, sun.color.b, sun.intensity + sun2.intensity, skyMat.uniforms.top.value.r, skyMat.uniforms.top.value.g, skyMat.uniforms.top.value.b, renderer.toneMappingExposure]);
+  if (mocap.fx) {
+    mocap.fxBirds.push([t, birdSnap.a.slice(0, birdSnap.n * 14)]);
+    const C = []; let on = 0; for (const c of clouds) { if (!c.on) continue; on++; const m = c.mesh; C.push(c.q, m.position.x, m.position.y, m.position.z, m.rotation.y, m.scale.x, m.scale.y, m.scale.z, c.edge === undefined ? 1 : c.edge); }
+    mocap.fxClouds.push([t, new Float32Array(C)]);
+    mocap.fxEnv.push([t, env.rainE, env.windE, WIND.x, WIND.z, env.storm, on / clouds.length, WET.value, bolt.flash || 0, env.cloudSpeed]);
+  }
   if (!mocap.traffic) return;
   const put = (m, kind) => {
     let o = mocap.objs.get(m.uuid);
@@ -3133,7 +3190,7 @@ function resample(s, fps, t0, t1) {
     const a = s[i], b = s[Math.min(i + 1, s.length - 1)], u = b[0] > a[0] ? THREE.MathUtils.clamp((t - a[0]) / (b[0] - a[0]), 0, 1) : 0;
     const L = k => a[k] + (b[k] - a[k]) * u;
     _qa.set(a[4], a[5], a[6], a[7]); _qb.set(b[4], b[5], b[6], b[7]); _qa.slerp(_qb, u);
-    _eu.setFromQuaternion(_qa, 'YXZ'); // three 'YXZ' == Maya/Houdini rotate order zxy (roll, tilt, then pan): no gimbal lock when orbiting
+    _eu.setFromQuaternion(_qa, 'YXZ'); // three 'YXZ' == Houdini rotate order zxy (roll, tilt, then pan): no gimbal lock when orbiting
     let r = [_eu.x, _eu.y, _eu.z].map(THREE.MathUtils.radToDeg);
     if (prev) r = r.map((v, k) => v + 360 * Math.round((prev[k] - v) / 360));
     prev = r;
@@ -3148,40 +3205,6 @@ function takeData(fps) {
   const T = mocap.take, cam = resample(T.cam, fps, 0, T.dur);
   const objs = T.objs.filter(o => o.s.length > 1).map(o => ({ name: o.name, kind: o.kind, keys: resample(o.s, fps, o.s[0][0], o.s[o.s.length - 1][0]) })).filter(o => o.keys.length);
   return { cam, objs, frames: cam.length, w: T.w, h: T.h };
-}
-const MAYA_TIME = { 24: 'film', 25: 'pal', 30: 'ntsc', 50: 'palf', 60: 'ntscf' };
-function exportMaya() {
-  const fps = +$('mcFps').value, D = takeData(fps), L = [];
-  const N = D.frames, ap = FILM_MM / 25.4;
-  L.push('//Maya ASCII 2018 scene', `//Name: polderstad_motion.ma`, '//Exported from Polderstad', 'requires maya "2018";', `currentUnit -l meter -a degree -t ${MAYA_TIME[fps]};`);
-  const curve = (node, attr, type, keys, get) => {
-    const cn = `${node}_${attr}`;
-    L.push(`createNode ${type} -n "${cn}";`, '\tsetAttr ".tan" 2;', '\tsetAttr ".wgt" no;');
-    L.push(`\tsetAttr -s ${keys.length} ".ktv[0:${keys.length - 1}]" ${keys.map(k => `${k.f} ${n4(get(k))}`).join(' ')};`);
-    L.push(`connectAttr "${cn}.o" "${node}.${attr}";`);
-  };
-  const xform = (node, keys) => {
-    ['translateX', 'translateY', 'translateZ'].forEach((a, i) => curve(node, a, 'animCurveTL', keys, k => k.t[i]));
-    ['rotateX', 'rotateY', 'rotateZ'].forEach((a, i) => curve(node, a, 'animCurveTA', keys, k => k.r[i]));
-  };
-  L.push('createNode transform -n "polderCam";', '	setAttr ".ro" 2;', 'createNode camera -n "polderCamShape" -p "polderCam";', '\tsetAttr -k off ".v";', `\tsetAttr ".cap" -type "double2" ${n4(ap)} ${n4(ap * D.h / D.w)};`, '\tsetAttr ".ff" 1;', '\tsetAttr ".ncp" 0.5;', '\tsetAttr ".fcp" 20000;');
-  xform('polderCam', D.cam);
-  curve('polderCamShape', 'focalLength', 'animCurveTU', D.cam, k => focalFromFov(k.fov, D.w, D.h));
-  if (D.objs.length) {
-    L.push('createNode transform -n "traffic";');
-    for (const o of D.objs) {
-      L.push(`createNode transform -n "${o.name}" -p "traffic";`, '	setAttr ".ro" 2;', `createNode locator -n "${o.name}Shape" -p "${o.name}";`, `\tsetAttr ".los" -type "double3" 1.5 1.5 1.5;`);
-      xform(o.name, o.keys);
-      // visible only while the object existed in the game
-      const f0 = o.keys[0].f, f1 = o.keys[o.keys.length - 1].f;
-      const vis = [...(f0 > 1 ? [{ f: 1, v: 0 }] : []), { f: f0, v: 1 }, ...(f1 < N ? [{ f: f1 + 1, v: 0 }] : [])];
-      L.push(`createNode animCurveTU -n "${o.name}_visibility";`, '\tsetAttr ".tan" 5;', '\tsetAttr ".wgt" no;', `\tsetAttr -s ${vis.length} ".ktv[0:${vis.length - 1}]" ${vis.map(k => `${k.f} ${k.v}`).join(' ')};`, `connectAttr "${o.name}_visibility.o" "${o.name}.v";`);
-    }
-  }
-  L.push('select -ne :defaultResolution;', `\tsetAttr ".w" ${D.w};`, `\tsetAttr ".h" ${D.h};`, `\tsetAttr ".dar" ${n4(D.w / D.h)};`);
-  L.push('createNode script -n "sceneConfigurationScriptNode";', `\tsetAttr ".b" -type "string" "playbackOptions -min 1 -max ${N} -ast 1 -aet ${N} ";`, '\tsetAttr ".st" 6;', '// End of polderstad_motion.ma');
-  download(new Blob([L.join('\n') + '\n'], { type: 'text/plain' }), fname('ma'));
-  toast(`Maya file saved · ${N} frames @ ${fps} fps`);
 }
 function exportHoudini() {
   const fps = +$('mcFps').value, D = takeData(fps);
@@ -3230,15 +3253,10 @@ print("Polderstad take loaded: %d frames @ %s fps" % (D["frames"], D["fps"]))
   toast(`Houdini script saved · ${D.frames} frames @ ${fps} fps`);
 }
 $('mcFps').value = '25';
-$('mcMaya').onclick = exportMaya; $('mcHou').onclick = exportHoudini;
+$('mcHou').onclick = exportHoudini;
 
-// ───────── animated USD scene ─────────
-// One .usda with everything: the town as real geometry (vertex colours → primvars:displayColor, per-vertex roughness),
-// every object that appeared during the take hidden until its moment and then dropping / growing in with the game's
-// exact animation, removed objects disappearing, windmill sails turning, traffic & animals moving, and the camera.
-// Metres, Y-up, frame 1 = start of the take. Opens in Houdini (Solaris: Sublayer / Reference LOP) and Maya (mayaUSD).
-// Every merged game mesh is split into material parts by its vertex colour, so in Maya/Houdini you get e.g.
-// wall_GEO, roof_GEO, glass_GEO, frame_GEO, door_GEO … ready to select by name and shade.
+// ───────── material parts (shared by the Houdini scene export) ─────────
+// Every merged game mesh is split into material parts by its vertex colour: wall, roof, glass, frame, door …
 let PARTMAP = null;
 function partTable() {
   if (PARTMAP) return PARTMAP;
@@ -3258,7 +3276,7 @@ function partTable() {
   add('bikepath', [REDPATH]);
   add('marking', [0xf0f0e8, 0xe9e6df, 0xeeeeea]);
   add('water', [0x4a7384]); add('bank', [0x5b6e33, 0x7d8f3e]);
-  add('grass', [0x68a04a, 0x6aa84a, 0x79b555, 0x6aa645, 0x7cba52, 0x68a443, 0x628e42]);
+  add('grass', [0x6aa64b, 0x64a046, 0x68a04a, 0x6aa84a, 0x79b555, 0x6aa645, 0x7cba52, 0x68a443, 0x628e42]);
   add('foliage', [...GREENS, ...GREENS.map(g => dk(g, 1.12)), ...GREENS.map(g => dk(g, 0.92)), 0x3f6b2e, 0x2f5a35]);
   add('wood', [FENCE, 0x5b4029, 0x7a5a3a, 0x5b4632, 0x3b3631, 0x6e5a44, 0x3a2a1a, 0x5a3423]);
   add('metal', [0x3a3d40, 0x333333, 0x222222, 0x24332a, 0x666666, 0x1a1a1a, 0x111111, 0x2a2a2a, 0xdddddd, 0x5d6166, 0x44484c]);
@@ -3301,194 +3319,9 @@ function splitParts(m) {
   }
   return out;
 }
-const CATEGORY = t => /^landmark/.test(t) ? 'landmarks' : /^(road|path|square)/.test(t) ? 'roads' : /^water/.test(t) ? 'water' : /^land_/.test(t) ? 'land' : /^bldg/.test(t) ? 'buildings' : /^(garden|yard)/.test(t) ? 'gardens' : /^tree/.test(t) ? 'trees' : /^landmark/.test(t) ? 'landmarks' : 'misc';
-function exportUSD() {
-  const T = mocap.take, fps = +$('mcFps').value, S = M_PER_UNIT, N = Math.max(1, Math.round(T.dur * fps) + 1);
-  const fr = t => Math.min(N, Math.max(1, Math.round(t * fps) + 1));
-  const out = []; let buf = [];
-  const w = str => { buf.push(str); if (buf.length > 4000) { out.push(buf.join('')); buf = []; } };
-  const f3 = (x, y, z) => '(' + x.toFixed(3) + ', ' + y.toFixed(3) + ', ' + z.toFixed(3) + ')';
-  const deg = THREE.MathUtils.radToDeg;
-  const agentIds = new Map(T.objs.map(o => [o.uuid, o]));
-  let nPrim = 0;
-  const col = new THREE.Color(), v = new THREE.Vector3();
-  // one Mesh prim per material part, welded points, faceVarying flat normals (hard edges in Maya / Houdini)
-  const nf = x => { const t = x.toFixed(3); return t === '-0.000' || t === '0.000' ? '0' : t.replace(/\.?0+$/, ''); };
-  const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3();
-  function writeMesh(m, pad, used) {
-    for (const [part, P] of splitParts(m)) {
-      const pts = [], cols = [], rough = [], fvi = [], nrm = [], st = [], seen = new Map();
-      for (let t = 0; t < P.pos.length; t += 9) {
-        const ids = [];
-        for (let q = 0; q < 3; q++) {
-          const o = t + q * 3, pk = f3(P.pos[o] * S, P.pos[o + 1] * S, P.pos[o + 2] * S), ck = f3(P.col[o], P.col[o + 1], P.col[o + 2]), rk = P.rough[t / 3 + q].toFixed(2);
-          const key = pk + ck + rk; let id = seen.get(key);
-          if (id === undefined) { id = pts.length; seen.set(key, id); pts.push(pk); cols.push(ck); rough.push(rk); }
-          ids.push(id);
-        }
-        if (ids[0] === ids[1] || ids[1] === ids[2] || ids[0] === ids[2]) continue;
-        _a.set(P.pos[t + 3] - P.pos[t], P.pos[t + 4] - P.pos[t + 1], P.pos[t + 5] - P.pos[t + 2]);
-        _b.set(P.pos[t + 6] - P.pos[t], P.pos[t + 7] - P.pos[t + 1], P.pos[t + 8] - P.pos[t + 2]);
-        _n.crossVectors(_a, _b).normalize(); const nk = '(' + nf(_n.x) + ',' + nf(_n.y) + ',' + nf(_n.z) + ')';
-        fvi.push(...ids); nrm.push(nk, nk, nk);
-        for (let q = 0; q < 3; q++) { const o = t + q * 3, [uu, vv] = boxUV(_n.x, _n.y, _n.z, P.pos[o] * S, P.pos[o + 1] * S, P.pos[o + 2] * S); st.push('(' + uu.toFixed(3) + ',' + vv.toFixed(3) + ')'); }
-      }
-      if (!fvi.length) continue;
-      let nm = part + '_GEO', q = 2; while (used.has(nm)) nm = part + q++ + '_GEO'; used.add(nm);
-      w(pad + 'def Mesh "' + nm + '" {\n');
-      w(pad + '  uniform token subdivisionScheme = "none"\n');
-      w(pad + '  int[] faceVertexCounts = [' + new Array(fvi.length / 3).fill(3).join(',') + ']\n');
-      w(pad + '  int[] faceVertexIndices = [' + fvi.join(',') + ']\n');
-      w(pad + '  point3f[] points = [' + pts.join(',') + ']\n');
-      w(pad + '  normal3f[] normals = [' + nrm.join(',') + '] (interpolation = "faceVarying")\n');
-      w(pad + '  color3f[] primvars:displayColor = [' + cols.join(',') + '] (interpolation = "vertex")\n');
-      w(pad + '  float[] primvars:roughness = [' + rough.join(',') + '] (interpolation = "vertex")\n');
-      w(pad + '  texCoord2f[] primvars:st = [' + st.join(',') + '] (interpolation = "faceVarying")\n'); // box-projected UVs, 1 unit = 1 metre
-      w(pad + '  string primvars:part = "' + part + '" (interpolation = "constant")\n');
-      w(pad + '}\n');
-    }
-  }
-  // generic transform ops: T · Rx · Ry · Rz · S (= three.js Euler XYZ), any of them may be time-sampled
-  function ops(o, pad, anim) {
-    const order = ['xformOp:translate', 'xformOp:rotateX', 'xformOp:rotateY', 'xformOp:rotateZ', 'xformOp:scale'];
-    const p = o.position, r = o.rotation, sc = o.scale;
-    if (anim && anim.length) {
-      const keys = new Map();
-      for (const a of anim) keys.set(fr(a[0]), a);
-      const tr = [], scl = [];
-      for (const [f, a] of keys) { tr.push(f + ': ' + f3(p.x * S, a[4] * S, p.z * S)); scl.push(f + ': ' + f3(a[1], a[2], a[3])); }
-      w(pad + 'double3 xformOp:translate.timeSamples = { ' + tr.join(', ') + ' }\n');
-      w(pad + 'float3 xformOp:scale.timeSamples = { ' + scl.join(', ') + ' }\n');
-    } else {
-      w(pad + 'double3 xformOp:translate = ' + f3(p.x * S, p.y * S, p.z * S) + '\n');
-      w(pad + 'float3 xformOp:scale = ' + f3(sc.x, sc.y, sc.z) + '\n');
-    }
-    w(pad + 'float xformOp:rotateX = ' + deg(r.x).toFixed(3) + '\n' + pad + 'float xformOp:rotateY = ' + deg(r.y).toFixed(3) + '\n');
-    const spin = spinLog.get(o.uuid);
-    if (spin && spin.length) {
-      const keys = new Map(); let prev = null;
-      for (const [t, z] of spin) { let d = deg(z); if (prev !== null) d += 360 * Math.round((prev - d) / 360); prev = d; keys.set(fr(t), d); }
-      w(pad + 'float xformOp:rotateZ.timeSamples = { ' + [...keys].map(([f, d]) => f + ': ' + d.toFixed(2)).join(', ') + ' }\n');
-    } else w(pad + 'float xformOp:rotateZ = ' + deg(r.z).toFixed(3) + '\n');
-    w(pad + 'uniform token[] xformOpOrder = ["' + order.join('", "') + '"]\n');
-  }
-  function visibility(e, pad) {
-    const ks = [];
-    if (e.tAdd > 0) ks.push('1: "invisible"', fr(e.tAdd) + ': "inherited"');
-    if (e.tRemove !== null) { if (!ks.length) ks.push('1: "inherited"'); ks.push(fr(e.tRemove) + ': "invisible"'); }
-    if (ks.length) w(pad + 'token visibility.timeSamples = { ' + ks.join(', ') + ' }\n');
-  }
-  function writeNode(o, pad, e, used, fallback) {
-    let base = cleanName(e ? (o.userData.tag || fallback || 'object') : (o.name || o.userData.tag || fallback || 'part')), nm = base + '_GRP', q = 2;
-    while (used.has(nm)) nm = base + '_' + q++ + '_GRP'; used.add(nm);
-    w(pad + 'def Xform "' + nm + '" {\n');
-    if (e) visibility(e, pad + '  ');
-    ops(o, pad + '  ', e && e.anim);
-    const kids = new Set();
-    if (o.isMesh) writeMesh(o, pad + '  ', kids);
-    for (const c of o.children) writeNode(c, pad + '  ', null, kids, 'body');
-    w(pad + '}\n');
-  }
-  // header
-  w('#usda 1.0\n(\n  defaultPrim = "World"\n  metersPerUnit = 1\n  upAxis = "Y"\n  timeCodesPerSecond = ' + fps + '\n  framesPerSecond = ' + fps + '\n  startTimeCode = 1\n  endTimeCode = ' + N + '\n  doc = "Polderstad take: ' + T.town.replace(/"/g, '') + ', ' + T.dur.toFixed(1) + ' s"\n)\n');
-  w('def Xform "World" (\n  prepend apiSchemas = ["MaterialBindingAPI"]\n)\n{\n  rel material:binding = </World/Looks/VertexColour>\n');
-  // material: vertex colour + per-vertex roughness (UsdPreviewSurface — Karma, Storm, Maya all read it)
-  w(`  def Scope "Looks" {
-    def Material "VertexColour" {
-      token outputs:surface.connect = </World/Looks/VertexColour/pbr.outputs:surface>
-      def Shader "pbr" {
-        uniform token info:id = "UsdPreviewSurface"
-        color3f inputs:diffuseColor.connect = </World/Looks/VertexColour/col.outputs:result>
-        float inputs:roughness.connect = </World/Looks/VertexColour/rough.outputs:result>
-        float inputs:metallic = 0
-        token outputs:surface
-      }
-      def Shader "col"
-      {
-        uniform token info:id = "UsdPrimvarReader_float3"
-        string inputs:varname = "displayColor"
-        float3 outputs:result
-      }
-      def Shader "rough"
-      {
-        uniform token info:id = "UsdPrimvarReader_float"
-        string inputs:varname = "roughness"
-        float outputs:result
-      }
-    }
-  }
-`);
-  // camera
-  const cam = resample(T.cam, fps, 0, T.dur), ap = 36;
-  w('  def Camera "render_CAM" {\n');
-  w('    double3 xformOp:translate.timeSamples = { ' + cam.map(k => k.f + ': ' + f3(k.t[0], k.t[1], k.t[2])).join(', ') + ' }\n');
-  w('    float3 xformOp:rotateZXY.timeSamples = { ' + cam.map(k => k.f + ': ' + f3(k.r[0], k.r[1], k.r[2])).join(', ') + ' }\n');
-  w('    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZXY"]\n');
-  w('    float horizontalAperture = ' + ap + '\n    float verticalAperture = ' + (ap * T.h / T.w).toFixed(4) + '\n');
-  if (cam.some(k => k.oh > 0)) { // isometric take: orthographic camera, aperture in tenths of a scene unit
-    w('    token projection = "orthographic"\n');
-    w('    float horizontalAperture.timeSamples = { ' + cam.map(k => k.f + ': ' + (k.oh * M_PER_UNIT * 10 * T.w / T.h).toFixed(3)).join(', ') + ' }\n');
-    w('    float verticalAperture.timeSamples = { ' + cam.map(k => k.f + ': ' + (k.oh * M_PER_UNIT * 10).toFixed(3)).join(', ') + ' }\n');
-  }
-  w('    float focalLength.timeSamples = { ' + cam.map(k => k.f + ': ' + focalFromFov(k.fov, T.w, T.h).toFixed(3)).join(', ') + ' }\n');
-  w('    float2 clippingRange = (0.5, 20000)\n  }\n');
-  // placeholder lights matching the game (delete / replace when lighting in Houdini)
-  const d = T.env.dir, q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
-  if (T.envS) {
-    // the time of day changed during the take: sun/moon direction, colour and strength + sky colour are animated per frame
-    const E = T.envS, nF = N - 1, at = tt => { let i = 0; while (i < E.length - 1 && E[i + 1][0] <= tt) i++; return E[i]; };
-    const fr = []; for (let f = 0; f <= nF; f++) fr.push([f + 1, at(f / fps)]);
-    const qq = new THREE.Quaternion(), vz = new THREE.Vector3(0, 0, 1), vd = new THREE.Vector3();
-    w('  def Scope "lights_GRP" {\n    def DistantLight "sun_LGT" (\n      doc = "sun by day, moon by night (game day/night cycle)"\n    ) {\n');
-    w('      float inputs:intensity.timeSamples = { ' + fr.map(([f, e]) => f + ': ' + (e[7] * 1.2).toFixed(3)).join(', ') + ' }\n');
-    w('      color3f inputs:color.timeSamples = { ' + fr.map(([f, e]) => f + ': ' + f3(e[4], e[5], e[6])).join(', ') + ' }\n      float inputs:angle = 1\n');
-    w('      quatf xformOp:orient.timeSamples = { ' + fr.map(([f, e]) => { qq.setFromUnitVectors(vz, vd.set(e[1], e[2], e[3]).normalize()); return f + ': (' + qq.w.toFixed(5) + ', ' + qq.x.toFixed(5) + ', ' + qq.y.toFixed(5) + ', ' + qq.z.toFixed(5) + ')'; }).join(', ') + ' }\n      uniform token[] xformOpOrder = ["xformOp:orient"]\n    }\n');
-    w('    def DomeLight "sky_LGT" {\n      float inputs:intensity.timeSamples = { ' + fr.map(([f, e]) => f + ': ' + (0.8 * Math.min(1.2, Math.max(0.03, (e[8] + e[9] + e[10]) / 1.6))).toFixed(3)).join(', ') + ' }\n');
-    w('      color3f inputs:color.timeSamples = { ' + fr.map(([f, e]) => f + ': ' + f3(e[8], e[9], e[10])).join(', ') + ' }\n    }\n  }\n');
-  } else {
-  w('  def Scope "lights_GRP" {\n    def DistantLight "sun_LGT" {\n      float inputs:intensity = ' + (T.env.sunI * 1.2).toFixed(2) + '\n      color3f inputs:color = ' + f3(T.env.sun.r, T.env.sun.g, T.env.sun.b) + '\n      float inputs:angle = 1\n');
-  w('      quatf xformOp:orient = (' + q.w.toFixed(5) + ', ' + q.x.toFixed(5) + ', ' + q.y.toFixed(5) + ', ' + q.z.toFixed(5) + ')\n      uniform token[] xformOpOrder = ["xformOp:orient"]\n    }\n');
-  w('    def DomeLight "sky_LGT" {\n      float inputs:intensity = 0.8\n      color3f inputs:color = ' + f3(T.env.sky.r, T.env.sky.g, T.env.sky.b) + '\n    }\n  }\n');
-  }
-  // ground
-  const G = 400 * S;
-  w('  def Mesh "ground_GEO" {\n    uniform token subdivisionScheme = "none"\n    int[] faceVertexCounts = [4]\n    int[] faceVertexIndices = [0, 1, 2, 3]\n');
-  w('    point3f[] points = [(' + -G + ', 0, ' + G + '), (' + G + ', 0, ' + G + '), (' + G + ', 0, ' + -G + '), (' + -G + ', 0, ' + -G + ')]\n');
-  w('    texCoord2f[] primvars:st = [(' + -G + ', ' + -G + '), (' + G + ', ' + -G + '), (' + G + ', ' + G + '), (' + -G + ', ' + G + ')] (interpolation = "faceVarying")\n');
-  w('    normal3f[] normals = [(0,1,0),(0,1,0),(0,1,0),(0,1,0)] (interpolation = "faceVarying")\n');
-  col.set(0x628e42); w('    color3f[] primvars:displayColor = [' + f3(col.r, col.g, col.b) + '] (interpolation = "constant")\n    float[] primvars:roughness = [1] (interpolation = "constant")\n  }\n');
-  // town (static + built during the take)
-  w('  def Xform "town_GRP" {\n');
-  let nTown = 0, nBuilt = 0; const cats = new Map();
-  for (const [uuid, e] of buildLog) { if (agentIds.has(uuid) || e.obj.userData.agent) continue; const c = CATEGORY(e.obj.userData.tag || ''); if (!cats.has(c)) cats.set(c, []); cats.get(c).push(e); }
-  for (const [c, list] of cats) {
-    w('    def Xform "' + c + '_GRP" {\n'); const used = new Set();
-    for (const e of list) { writeNode(e.obj, '      ', e, used, c); nTown++; if (e.tAdd > 0) nBuilt++; }
-    w('    }\n');
-  }
-  w('  }\n');
-  // traffic & animals: per-frame transforms
-  w('  def Xform "traffic_GRP" {\n');
-  for (const o of T.objs) {
-    if (o.s.length < 2) continue;
-    const e = buildLog.get(o.uuid), keys = resample(o.s, fps, o.s[0][0], o.s[o.s.length - 1][0]); if (!keys.length || !e) continue;
-    w('    def Xform "' + ({ boat: 'vehicle_boat', ambulance: 'vehicle_ambulance', ped: 'npc_pedestrian', player: 'npc_footballer', ball: 'prop_football', car: 'vehicle_car', fire: 'vehicle_firetruck', police: 'vehicle_police', train: 'vehicle_train', cyclist: 'vehicle_bike', cow: 'animal_cow', sheep: 'animal_sheep' }[o.kind] || o.kind) + '_' + o.name.split('_').pop() + '_GRP" {\n');
-    const ks = []; if (keys[0].f > 1) ks.push('1: "invisible"', keys[0].f + ': "inherited"'); if (keys[keys.length - 1].f < N) { if (!ks.length) ks.push('1: "inherited"'); ks.push((keys[keys.length - 1].f + 1) + ': "invisible"'); }
-    if (ks.length) w('      token visibility.timeSamples = { ' + ks.join(', ') + ' }\n');
-    w('      double3 xformOp:translate.timeSamples = { ' + keys.map(k => k.f + ': ' + f3(k.t[0], k.t[1], k.t[2])).join(', ') + ' }\n');
-    w('      float3 xformOp:rotateZXY.timeSamples = { ' + keys.map(k => k.f + ': ' + f3(k.r[0], k.r[1], k.r[2])).join(', ') + ' }\n');
-    w('      uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateZXY"]\n');
-    const m = e.obj, kids = new Set(); if (m.isMesh) writeMesh(m, '      ', kids); for (const c of m.children) writeNode(c, '      ', null, kids, 'part');
-    w('    }\n');
-  }
-  w('  }\n}\n');
-  out.push(buf.join(''));
-  download(new Blob(out, { type: 'text/plain' }), fname('usda'));
-  toast('USD scene saved · ' + N + ' frames · ' + nTown + ' objects (' + nBuilt + ' built during take)');
-}
-$('mcUsd').onclick = exportUSD; $('mcHouScene').onclick = exportHoudiniScene;
+$('mcHouScene').onclick = () => exportHoudiniScene();
 
-// static scene → OBJ (metres, vertex colours as "v x y z r g b"), to line the camera up with the city in Maya/Houdini
+// static scene → OBJ (metres, vertex colours as "v x y z r g b"), to line the camera up with the city in any 3D app
 function exportOBJ() {
   const parts = [`# Polderstad scene — metres, Y-up. Vertex colours appended to v lines.\n`];
   let base = 1, buf = [], tris = 0, vtBase = 1;
@@ -3678,7 +3511,7 @@ async function exportTemplates(writer) {
   return list.length;
 }
 // store-only ZIP (fallback when the browser can't write to a folder)
-// ───────────────────────── Houdini scene export (no USD) ─────────────────────────
+// ───────────────────────── Houdini scene export ─────────────────────────
 // A zip with native Houdini geometry (.geo, JSON) + anim.json. The Houdini tool (houdini_tools/polderstad_houdini_scene.py)
 // builds a classic /obj scene from it: town geometry with a procedural build animation (birth/death per object),
 // traffic copied onto animated points, a keyframed camera, Redshift materials per part, sun light and a Redshift ROP.
@@ -3753,7 +3586,7 @@ function geoSerialize(W, withAnim) {
   return out;
 }
 function encodeChunks(chunks) { const enc = new TextEncoder(), bufs = chunks.map(c => enc.encode(c)), len = bufs.reduce((a, b) => a + b.length, 0), u = new Uint8Array(len); let o = 0; for (const b of bufs) { u.set(b, o); o += b.length; } return u; }
-async function exportHoudiniScene() {
+async function exportHoudiniScene(tag) {
   const T = mocap.take; if (!T) { toast('Record a take first (M)'); return; }
   toast('Building Houdini scene…'); await new Promise(r => setTimeout(r, 40));
   const fps = +$('mcFps').value, S = M_PER_UNIT, D = takeData(fps);
@@ -3790,12 +3623,115 @@ async function exportHoudiniScene() {
     traffic: tr,
   };
   const base = cleanName(anim.town) || 'polderstad';
-  const readme = `Polderstad take for Houdini (no USD)\n\nIn Houdini 20.5: shelf "Polderstad" > "Import Polderstad Scene", pick this zip (or the unzipped folder).\n\ntown.geo     whole town, metres, Y-up. Point attribs: Cd (game colour), pivot, birth, death (seconds), kind (0 tile, 1 building); vertex uv (1 unit = 1 m); prim attribs name, part\ntraffic.geo  one prototype per vehicle / animal / person (name = traffic id)\nanim.json    camera keys (rotate order ZXY, degrees), traffic transforms per frame, fps, resolution, sun\n`;
+  const readme = `Polderstad take for Houdini\n\nIn Houdini 20.5: shelf "Polderstad" > "Import Polderstad Scene", pick this zip (or the unzipped folder).\n\ntown.geo     whole town, metres, Y-up. Point attribs: Cd (game colour), pivot, birth, death (seconds), kind (0 tile, 1 building); vertex uv (1 unit = 1 m); prim attribs name, part\ntraffic.geo  one prototype per vehicle / animal / person (name = traffic id)\nanim.json    camera keys (rotate order ZXY, degrees), traffic transforms per frame, fps, resolution, sun\n`;
   toast('Packing zip…'); await new Promise(r => setTimeout(r, 20));
   const zip = makeZip([[base + '/town.geo', encodeChunks(geoSerialize(town, true))], [base + '/traffic.geo', encodeChunks(geoSerialize(traffic, false))], [base + '/anim.json', JSON.stringify(anim)], [base + '/README.txt', readme]]);
-  download(zip, fname('zip'));
+  download(zip, typeof tag === 'string' && tag ? fname('zip').replace(/\.zip$/, '_' + cleanName(tag) + '.zip') : fname('zip'));
   toast(`Houdini scene: ${(town.vtx.length / 3 / 1000).toFixed(0)}k triangles, ${tr.length} moving objects`);
 }
+// ───────────────────────── FX export: birds, clouds, weather (separate zip) ─────────────────────────
+// Per-frame point caches (Houdini JSON .geo, one file per frame: birds/birds.$F4.geo, clouds/clouds.$F4.geo) with
+// everything needed to copy or instance your own models onto them, the 150 cloud shapes as prototypes, and
+// weather.json with per-frame rain / wind / storm / cloud cover / wetness / lightning channels and every lightning strike.
+// Metres, Y-up, frame 1 = start of the take (same timing as the Houdini scene zip). Models face +Z, up +Y.
+const BIRD_STRIDE = 14, CLOUD_STRIDE = 9;
+function fxResample(S, fps, N, stride, interp) { // S: [[t, Float32Array(records of `stride`, [0] = id)]]
+  const out = []; let i = 0;
+  for (let f = 0; f < N; f++) {
+    const t = f / fps; while (i < S.length - 2 && S[i + 1][0] < t) i++;
+    const a = S[i], b = S[Math.min(i + 1, S.length - 1)]; if (!a) { out.push(new Float32Array(0)); continue; }
+    const u = b[0] > a[0] ? THREE.MathUtils.clamp((t - a[0]) / (b[0] - a[0]), 0, 1) : 0, A = a[1], o = new Float32Array(A.length); o.set(A);
+    if (u > 0) { const Bm = new Map(); for (let k = 0; k < b[1].length; k += stride) Bm.set(b[1][k], k); for (let k = 0; k < A.length; k += stride) { const kb = Bm.get(A[k]); if (kb !== undefined) interp(o, k, b[1], kb, u); } }
+    out.push(o);
+  }
+  return out;
+}
+const lerpRange = (o, k, B, kb, u, from, to) => { for (let j = from; j <= to; j++) o[k + j] += (B[kb + j] - o[k + j]) * u; };
+function birdInterp(o, k, B, kb, u) {
+  if (Math.abs(B[kb + 2] - o[k + 2]) + Math.abs(B[kb + 4] - o[k + 4]) > 5) return; // new flock reused an id: don't streak
+  lerpRange(o, k, B, kb, u, 2, 4); lerpRange(o, k, B, kb, u, 9, 13);
+  const d = o[k + 5] * B[kb + 5] + o[k + 6] * B[kb + 6] + o[k + 7] * B[kb + 7] + o[k + 8] * B[kb + 8], s = d < 0 ? -1 : 1; // nlerp, shortest way
+  let l = 0; for (let j = 5; j <= 8; j++) { o[k + j] += (B[kb + j] * s - o[k + j]) * u; l += o[k + j] * o[k + j]; }
+  l = Math.sqrt(l) || 1; for (let j = 5; j <= 8; j++) o[k + j] /= l;
+}
+function cloudInterp(o, k, B, kb, u) {
+  if (Math.abs(B[kb + 1] - o[k + 1]) + Math.abs(B[kb + 3] - o[k + 3]) > 20) return; // wrapped around the cloud field
+  lerpRange(o, k, B, kb, u, 1, 3); lerpRange(o, k, B, kb, u, 5, 8);
+}
+// one Houdini JSON .geo with points only. attrs: {name, size, v:[...], int?, t?:'point'|'vector'|'quaternion', strings?:[...]}
+function pointGeoText(n, attrs) {
+  const body = attrs.map(a => {
+    if (a.strings) return `[["scope","public","type","string","name","${a.name}","options",{}],["size",1,"storage","int32","strings",[${a.strings.map(s => JSON.stringify(s)).join(',')}],"indices",["size",1,"storage","int32","arrays",[[${a.v.join(',')}]]]]]`;
+    const st = a.int ? 'int32' : 'fpreal32', ds = a.int ? 'int64' : 'fpreal64', opts = a.t ? `"type":{"type":"string","value":"${a.t}"}` : '';
+    let vals; if (a.size === 1) vals = `"arrays",[[${a.v.join(',')}]]`; else { const tu = []; for (let i = 0; i < a.v.length; i += a.size) tu.push('[' + a.v.slice(i, i + a.size).join(',') + ']'); vals = `"tuples",[${tu.join(',')}]`; }
+    return `[["scope","public","type","numeric","name","${a.name}","options",{${opts}}],["size",${a.size},"storage","${st}","defaults",["size",1,"storage","${ds}","values",[0]],"values",["size",${a.size},"storage","${st}",${vals}]]]`;
+  }).join(',');
+  return `["fileversion","20.5.613","hasindex",false,"pointcount",${n},"vertexcount",0,"primitivecount",0,"info",{"software":"Polderstad"},"topology",["pointref",["indices",[]]],"attributes",["pointattributes",[${body}]],"primitives",[]]`;
+}
+const r3 = x => +x.toFixed(3), r4 = x => +x.toFixed(4);
+function birdFrameGeo(a) {
+  const n = a.length / BIRD_STRIDE, S = M_PER_UNIT, P = [], v = [], q = [], ps = [], fl = [], id = [], kd = [];
+  for (let k = 0; k < a.length; k += BIRD_STRIDE) {
+    id.push(a[k] | 0); kd.push(a[k + 1] | 0); P.push(r3(a[k + 2] * S), r3(a[k + 3] * S), r3(a[k + 4] * S));
+    q.push(r4(a[k + 5]), r4(a[k + 6]), r4(a[k + 7]), r4(a[k + 8])); ps.push(r3(a[k + 9])); fl.push(r4(a[k + 10]));
+    v.push(r3(a[k + 11] * S), r3(a[k + 12] * S), r3(a[k + 13] * S));
+  }
+  return pointGeoText(n, [{ name: 'P', size: 3, v: P, t: 'point' }, { name: 'v', size: 3, v, t: 'vector' }, { name: 'orient', size: 4, v: q, t: 'quaternion' }, { name: 'pscale', size: 1, v: ps }, { name: 'flap', size: 1, v: fl }, { name: 'id', size: 1, v: id, int: true }, { name: 'kind', size: 1, v: kd, int: true }]);
+}
+function cloudFrameGeo(a) {
+  const n = a.length / CLOUD_STRIDE, S = M_PER_UNIT, P = [], q = [], sc = [], fd = [], id = [], nm = [];
+  for (let k = 0; k < a.length; k += CLOUD_STRIDE) {
+    const c = a[k] | 0, ry = a[k + 4]; id.push(c); nm.push(c);
+    P.push(r3(a[k + 1] * S), r3(a[k + 2] * S), r3(a[k + 3] * S)); q.push(0, r4(Math.sin(ry / 2)), 0, r4(Math.cos(ry / 2)));
+    sc.push(r4(a[k + 5]), r4(a[k + 6]), r4(a[k + 7])); fd.push(r3(a[k + 8]));
+  }
+  return pointGeoText(n, [{ name: 'P', size: 3, v: P, t: 'point' }, { name: 'orient', size: 4, v: q, t: 'quaternion' }, { name: 'scale', size: 3, v: sc, t: 'vector' }, { name: 'fade', size: 1, v: fd }, { name: 'id', size: 1, v: id, int: true }, { name: 'name', v: nm, strings: clouds.map((_, i) => 'cloud_' + String(i).padStart(3, '0')) }]);
+}
+async function exportFx(tag) {
+  const T = mocap.take; if (!T || !T.fx) { toast('Record a take with "Include birds, clouds & weather" ticked'); return; }
+  toast('Building birds, clouds & weather…'); await new Promise(r => setTimeout(r, 40));
+  const fps = +$('mcFps').value, N = Math.max(1, Math.round(T.dur * fps) + 1), X = T.fx, S = M_PER_UNIT;
+  const base = (cleanName(T.town) || 'polderstad') + '_fx', files = [], pad = f => String(f).padStart(4, '0');
+  const birds = fxResample(X.birds, fps, N, BIRD_STRIDE, birdInterp), cls = fxResample(X.clouds, fps, N, CLOUD_STRIDE, cloudInterp);
+  let maxBirds = 0;
+  for (let f = 0; f < N; f++) { files.push([`${base}/birds/birds.${pad(f + 1)}.geo`, birdFrameGeo(birds[f])]); maxBirds = Math.max(maxBirds, birds[f].length / BIRD_STRIDE); }
+  for (let f = 0; f < N; f++) files.push([`${base}/clouds/clouds.${pad(f + 1)}.geo`, cloudFrameGeo(cls[f])]);
+  { // the cloud shapes, in local space, prim attrib name = cloud_###
+    const W = geoWriter(); for (const c of clouds) geoAddObject(W, c.mesh, 'cloud_' + String(c.q).padStart(3, '0'), { local: true, birth: -1000, death: 1e6, kind: 1 });
+    files.push([`${base}/cloud_shapes.geo`, encodeChunks(geoSerialize(W, false))]);
+  }
+  // weather channels, one value per frame
+  const E = X.env, ch = { rain: [], wind: [], wind_dirx: [], wind_dirz: [], wind_angle: [], storm: [], cloud_cover: [], wet: [], lightning: [], cloud_speed: [] }; let i = 0;
+  for (let f = 0; f < N; f++) {
+    const t = f / fps; while (i < E.length - 2 && E[i + 1][0] < t) i++;
+    const a = E[i], b = E[Math.min(i + 1, E.length - 1)], u = b[0] > a[0] ? THREE.MathUtils.clamp((t - a[0]) / (b[0] - a[0]), 0, 1) : 0, L = k => a[k] + (b[k] - a[k]) * u;
+    const dx = L(3), dz = L(4), dl = Math.hypot(dx, dz) || 1;
+    ch.rain.push(r4(L(1))); ch.wind.push(r4(L(2))); ch.wind_dirx.push(r4(dx / dl)); ch.wind_dirz.push(r4(dz / dl)); ch.wind_angle.push(r3(THREE.MathUtils.radToDeg(Math.atan2(dx, dz))));
+    ch.storm.push(r4(L(5))); ch.cloud_cover.push(r4(L(6))); ch.wet.push(r4(L(7))); ch.lightning.push(r4(Math.max(a[8], b[8]))); ch.cloud_speed.push(r4(L(9)));
+  }
+  const W = { version: 1, town: T.town, fps, frames: N, metresPerCell: S, maxBirds,
+    units: 'rain, wind, storm, cloud_cover, wet, lightning: 0..1 (game sliders). wind_dir: unit vector the wind blows toward. cloud_speed: game multiplier (1 = clouds drift ~10 m/s).',
+    channels: ch, lightning_strikes: X.bolts.map(([t, pts]) => ({ frame: Math.round(t * fps) + 1, points: pts.map(p => [r3(p[0] * S), r3(p[1] * S), r3(p[2] * S)]) })) };
+  files.push([`${base}/weather.json`, JSON.stringify(W)]);
+  files.push([`${base}/README.txt`, `Polderstad birds, clouds & weather for Houdini (same timing as the Houdini scene zip of this take)
+
+In Houdini 20.5: shelf "Polderstad" > "Import Polderstad FX" (or "Import Polderstad Scene", it recognises this zip).
+
+birds/birds.$F4.geo    one point per bird per frame. P (m), v (m/s), orient (quaternion; model faces +Z, up +Y),
+                       pscale (1 = starling, 2.6 = goose; the game's bird is ~1 m long at pscale 1), flap (wing angle,
+                       radians: left wing rotates +flap around the bird's Z axis, right wing -flap), id (stable per bird), kind (0 starling, 1 goose)
+clouds/clouds.$F4.geo  one point per visible cloud per frame. P (m), orient, scale (vector), fade (0..1, fades out at the
+                       edge of the cloud field), id, name (cloud_###, matches the prims in cloud_shapes.geo)
+cloud_shapes.geo       the 150 cloud shapes in local space, prim attrib name = cloud_###
+weather.json           per-frame channels: rain, wind, wind_dirx/z, wind_angle, storm, cloud_cover, wet, lightning (flash), cloud_speed,
+                       plus every lightning strike (frame + bolt path in metres)
+`]);
+  toast('Packing zip…'); await new Promise(r => setTimeout(r, 20));
+  download(makeZip(files), typeof tag === 'string' && tag ? fname('zip').replace(/\.zip$/, '_' + cleanName(tag) + '_fx.zip') : fname('zip').replace(/\.zip$/, '_fx.zip'));
+  toast(`FX zip: ${N} frames · up to ${maxBirds} birds · ${X.bolts.length} lightning strikes`);
+}
+async function exportTakeZips(tag) { await exportHoudiniScene(tag); if (mocap.take && mocap.take.fx) { await new Promise(r => setTimeout(r, 400)); await exportFx(tag); } }
+$('mcFxZip').onclick = () => exportFx();
 function makeZip(files) {
   const crcT = new Uint32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
   const crc = d => { let c = 0xffffffff; for (let i = 0; i < d.length; i++) c = crcT[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
@@ -3834,7 +3770,7 @@ $('assetClose').onclick = () => $('assetModal').classList.remove('open');
 // ───────── build-up animation ─────────
 // Takes the town as it is, removes everything for a moment, then rebuilds it: road and land tiles drop in as a wave from
 // the start point, houses grow up behind it, gardens follow their houses, trees sprout, landmarks rise when the wave
-// reaches them. Objects really leave and re-enter the scene, so a motion take records it and the USD export carries
+// reaches them. Objects really leave and re-enter the scene, so a motion take records it and the Houdini export carries
 // every object's appearance frame and grow animation.
 const buildFx = { active: false, t: 0, end: 0, queue: [], qi: 0, start: null, pick: false, chunkPending: new Int32Array(NCH * NCH), restore: null, finishing: false };
 const bfMarker = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.12, 8, 32), new THREE.MeshBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.85, depthWrite: false }));
@@ -3915,9 +3851,9 @@ function startBuildUp() {
   Object.assign(buildFx, { active: true, t: 0, end: pre + T + 1.2, queue: items, qi: 0, finishing: false });
   if ($('bfOrbit').checked) { controls.autoRotate = true; $('cine').classList.add('on'); }
   // recording starts after the town is gone, so every object is logged as "appears at …"
-  buildFx.recVideo = $('bfVideo').checked; buildFx.recUsd = $('bfUsd').checked; buildFx.recHou = $('bfHou').checked;
+  buildFx.recVideo = $('bfVideo').checked; buildFx.recHou = $('bfHou').checked;
   if (buildFx.recVideo && !rec) toggleRec();
-  if ((buildFx.recUsd || buildFx.recHou) && !mocap.on) mocapStart();
+  if (buildFx.recHou && !mocap.on) mocapStart();
   $('bfGo').classList.add('on'); $('bfGo').textContent = '■ Building…';
   toast('Building up · ' + T + ' s');
 }
@@ -3941,12 +3877,9 @@ function finishBuildUp() {
   if ($('bfOrbit').checked && !r.cine) { controls.autoRotate = false; $('cine').classList.remove('on'); }
   $('bfGo').classList.remove('on'); $('bfGo').textContent = '▶ Build it up (B)';
   if (buildFx.recVideo && rec) toggleRec();
-  if (buildFx.recUsd || buildFx.recHou) {
+  if (buildFx.recHou) {
     if (mocap.on) mocapStop();
-    if (mocap.take) {
-      if (buildFx.recHou) setTimeout(() => exportHoudiniScene(), 60);
-      if (buildFx.recUsd) { toast('Writing USD…'); setTimeout(() => exportUSD(), buildFx.recHou ? 400 : 60); }
-    }
+    if (mocap.take) setTimeout(() => exportTakeZips(), 60);
   } else toast('Built');
 }
 function cancelBuildUp() { // jump to the end: everything appears immediately
@@ -3962,6 +3895,8 @@ addEventListener('keydown', e => {
   if ($('assetModal').classList.contains('open')) { if (e.key === 'Escape') $('assetModal').classList.remove('open'); return; }
   if (document.activeElement && document.activeElement.isContentEditable) { if (e.key === 'Enter') { e.preventDefault(); document.activeElement.blur(); } return; }
   const k = e.key.toLowerCase();
+  if (photo.active && !e.ctrlKey && !e.metaKey) { keys.add(k); if (k === ' ' || k === 'enter') e.preventDefault(); photoKey(e, k); return; }
+  if (k === 'o' && !e.ctrlKey && !e.metaKey) { enterPhoto(); return; }
   if (k === 'control' || k === 'meta') setEraseHeld(true);
   if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); undo(); return; }
   if (e.ctrlKey || e.metaKey) return;
@@ -3971,7 +3906,7 @@ addEventListener('keydown', e => {
   if (k === 'i') setIso(!view.iso); if (view.iso && k === 'q') isoTurn(1); if (view.iso && k === 'e') isoTurn(-1);
   if (k === 'h') toggleUI(); if (k === 'c') toggleCine(); if (k === 'p') screenshot(1); if (k === 'v') toggleRec(); if (k === 'm') toggleMocap(); if (k === 'b') $('bfGo').click(); if (k === 'g') toggleGrow(); if (k === 'n') toggleCycle();
   if (k === 't') { look.tilt = look.tilt > 0 ? 0 : 6; $('tilt').value = look.tilt; updateTilt(); }
-  if (k === 'escape') { drag = null; updateGhost(); if (focus.obj) releaseFocus(true); }
+  if (k === 'escape') { drag = null; updateGhost(); if (cineShot.active) stopShot(); else if (focus.obj) releaseFocus(true); }
 });
 addEventListener('keyup', e => { keys.delete(e.key.toLowerCase()); if ((e.key === 'Control' || e.key === 'Meta') && !(drag && drag.erase)) setEraseHeld(false); });
 addEventListener('blur', () => { keys.clear(); setEraseHeld(false); });
@@ -4563,6 +4498,437 @@ function stepMarket(dt) {
   }
 }
 
+// ───────────────────────── cinematic shots (loading-screen style camera moves) ─────────────────────────
+// Each shot is a function of u (0..1, eased) that returns a camera position + look-at point, built around the point
+// you are looking at (or the focused building). Play one, optionally recording video and/or a motion take.
+const cineShot = { active: null, t: 0, dur: 12, recVideo: false, recTake: false, prevTilt: null };
+const _cp = new THREE.Vector3(), _ct = new THREE.Vector3();
+const easeIO = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2, easeS = u => u * u * (3 - 2 * u);
+function shotBasis() {
+  const T = (focus.obj ? focus.centre : controls.target).clone(); T.y = 0;
+  const off = camera.position.clone().sub(controls.target); const yaw = Math.atan2(off.x, off.z);
+  const back = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), right = new THREE.Vector3(back.z, 0, -back.x);
+  return { T, yaw, back, right, fwd: back.clone().negate() };
+}
+// a road route for the street-level glide: walk straight along the roads from the nearest road cell
+function roadRoute(T, cells) {
+  let k = nearestCarCell(T.x, T.z, 12); if (k < 0) return null;
+  const path = [k]; let prev = -1;
+  for (let q = 0; q < cells; q++) {
+    const n = nbrs('car', k).filter(x => x !== prev); if (!n.length) break;
+    const st = prev >= 0 ? k + (k - prev) : -1, nx = n.includes(st) ? st : n[(q * 7 + k) % n.length];
+    prev = k; k = nx; path.push(k);
+  }
+  return path.length > 2 ? path.map(c => new THREE.Vector3(wx(c % N), 0, wx((c / N) | 0))) : null;
+}
+function alongPath(pts, u, out) { const f = u * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(f)); return out.copy(pts[i]).lerp(pts[i + 1], f - i); }
+const SHOTS = {
+  flyover: { label: '✈️ Flyover', make: B => u => { const e = u; _cp.copy(B.T).addScaledVector(B.fwd, -26 + 52 * e).setY(17 - 3 * Math.sin(e * Math.PI)); _ct.copy(_cp).addScaledVector(B.fwd, 14).setY(0); return [_cp, _ct]; } },
+  crane: { label: '🏗️ Crane reveal', make: B => u => { const e = easeIO(u); _cp.copy(B.T).addScaledVector(B.back, 2.4 + 15 * e).addScaledVector(B.right, 1.2 * e).setY(0.35 + 17 * e * e); _ct.copy(B.T).setY(0.7 * (1 - e) + 0.1); return [_cp, _ct]; } },
+  hero: { label: '🎯 Hero shot', tilt: 1.5, make: B => u => { const e = easeS(u), a = B.yaw - 0.7 + 1.4 * e, r = 5.2 - 1.6 * e; _cp.set(B.T.x + Math.sin(a) * r, 0.55 + 1.0 * e, B.T.z + Math.cos(a) * r); _ct.copy(B.T).setY(1.3 - 0.4 * e); return [_cp, _ct]; } },
+  map: { label: '🗺️ Map drift', make: B => u => { const e = u; _ct.copy(B.T).addScaledVector(B.right, -8 + 16 * e); _cp.copy(_ct).setY(46).addScaledVector(B.back, 0.6); return [_cp, _ct]; } },
+  miniature: { label: '🔍 Miniature pan', tilt: 12, make: B => u => { const e = easeS(u); _ct.copy(B.T).addScaledVector(B.right, -10 + 20 * e); _cp.copy(_ct).addScaledVector(B.back, 16).setY(22); return [_cp, _ct]; } },
+  street: { label: '🚲 Street glide', tilt: 0, make: B => { const pts = roadRoute(B.T, Math.max(8, Math.round(cineShot.dur * 0.8))); if (!pts) return null; return u => { const e = easeS(u); alongPath(pts, Math.min(1, e * 0.92), _cp).setY(0.42); alongPath(pts, Math.min(1, e * 0.92 + 0.08), _ct).setY(0.3); return [_cp, _ct]; }; } },
+  golden: { label: '🌅 Golden sweep', time: 19.4, make: B => u => { const e = easeIO(u), a = B.yaw + 2.1 * e, r = 36 - 12 * e; _cp.set(B.T.x + Math.sin(a) * r, 15 - 5 * e, B.T.z + Math.cos(a) * r); _ct.copy(B.T).setY(0.5); return [_cp, _ct]; } },
+  rise: { label: '🌄 Horizon tilt-down', make: B => u => { const e = easeIO(u); _cp.copy(B.T).addScaledVector(B.back, 22 - 14 * e).setY(3 + 30 * e); _ct.copy(B.T).addScaledVector(B.fwd, 40 * (1 - e)).setY(6 * (1 - e)); return [_cp, _ct]; } },
+};
+function playShot(id) {
+  if (cineShot.active) stopShot();
+  const S = SHOTS[id]; if (!S) return;
+  if (view.iso) setIso(false);
+  if (focus.obj && !focus.follow) releaseFocus(false);
+  if (controls.autoRotate) toggleCine();
+  cineShot.dur = +$('shotDur').value; const fn = S.make(shotBasis());
+  if (!fn) { toast('No road nearby for a street glide'); return; }
+  if (S.time !== undefined) setHour(S.time);
+  if (S.tilt !== undefined) { cineShot.prevTilt = look.tilt; look.tilt = S.tilt; updateTilt(); }
+  Object.assign(cineShot, { active: id, fn, t: 0, recVideo: $('shotVideo').checked, recTake: $('shotTake').checked });
+  const [p, t] = fn(0); camera.position.copy(p); controls.target.copy(t); camera.lookAt(t);
+  if (cineShot.recVideo && !rec) toggleRec();
+  if (cineShot.recTake && !mocap.on) mocapStart();
+  document.querySelectorAll('[data-shot]').forEach(b => b.classList.toggle('on', b.dataset.shot === id));
+  toast(S.label.replace(/^\S+\s/, '') + ' · ' + cineShot.dur + ' s (Esc stops)');
+}
+function stopShot(done) {
+  if (!cineShot.active) return;
+  cineShot.active = null; document.querySelectorAll('[data-shot]').forEach(b => b.classList.remove('on'));
+  if (cineShot.prevTilt !== null) { look.tilt = cineShot.prevTilt; cineShot.prevTilt = null; updateTilt(); }
+  if (cineShot.recVideo && rec) toggleRec();
+  if (cineShot.recTake && mocap.on) { mocapStop(); toast('Shot recorded — export it under Motion export'); }
+  else if (done) toast('Shot finished');
+}
+function stepShot(dt) {
+  if (!cineShot.active) return false;
+  cineShot.t += dt; const u = Math.min(1, cineShot.t / cineShot.dur);
+  const [p, t] = cineShot.fn(u); camera.position.copy(p); controls.target.copy(t); camera.lookAt(t);
+  if (u >= 1) stopShot(true);
+  return true;
+}
+
+// ───────────────────────── birds: starling murmurations + geese in V formation ─────────────────────────
+const BIRD_MAX = 420;
+const birdMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.8, flatShading: true });
+const mkBirdPart = (geo) => { const m = new THREE.InstancedMesh(geo, birdMat, BIRD_MAX); m.count = 0; m.frustumCulled = false; m.userData.noExport = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); return m; };
+const birdBody = mkBirdPart(new THREE.BoxGeometry(0.035, 0.03, 0.11));
+const wingGeoL = new THREE.BoxGeometry(0.11, 0.006, 0.05); wingGeoL.translate(-0.055, 0, 0.005);
+const wingGeoR = new THREE.BoxGeometry(0.11, 0.006, 0.05); wingGeoR.translate(0.055, 0, 0.005);
+const birdWingL = mkBirdPart(wingGeoL), birdWingR = mkBirdPart(wingGeoR);
+const flocks = [], geese = [];
+let birdUid = 0; const _bvel = new THREE.Vector3(), birdSnap = { n: 0, a: new Float32Array(BIRD_MAX * 14) }; // [id, kind, x,y,z, qx,qy,qz,qw, scale, flap, vx,vy,vz]
+let birdAmount = 0.5, birdTimer = 0, geeseTimer = 8;
+const _bm = new THREE.Matrix4(), _bw = new THREE.Matrix4(), _bq = new THREE.Quaternion(), _bs = new THREE.Vector3(), _bf = new THREE.Vector3(), _bup = new THREE.Vector3(0, 1, 0), _be = new THREE.Euler();
+function newFlock(T) {
+  const n = 18 + (Math.random() * 30 | 0), a = Math.random() * 6.28, r = 10 + Math.random() * 25;
+  const c = new THREE.Vector3(T.x + Math.cos(a) * r, 5 + Math.random() * 5, T.z + Math.sin(a) * r);
+  const f = { goal: c.clone(), goalT: 0, birds: [] };
+  for (let q = 0; q < n; q++) f.birds.push({ id: ++birdUid, p: c.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5), (Math.random() - 0.5) * 2)), v: new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).multiplyScalar(2), ph: Math.random() * 6.28 });
+  return f;
+}
+function newGeese(T) {
+  const n = 7 + (Math.random() * 8 | 0), a = Math.random() * 6.28, head = new THREE.Vector3(-Math.cos(a), 0, -Math.sin(a));
+  const side = new THREE.Vector3(-head.z, 0, head.x), start = new THREE.Vector3(T.x + Math.cos(a) * 70, 10 + Math.random() * 4, T.z + Math.sin(a) * 70).addScaledVector(side, (Math.random() - 0.5) * 30);
+  const id0 = birdUid + 1; birdUid += n;
+  return { p: start, head, side, speed: 3.2 + Math.random() * 0.6, n, t: 0, T: T.clone(), id0 };
+}
+function stepBirds(dt) {
+  const T = controls.target, h = env.hour, day = h > 6 && h < 21.5 ? 1 : 0;
+  const amt = birdAmount * day * (1 - 0.85 * env.rainE) * (1 - env.storm);
+  birdTimer -= dt;
+  if (birdTimer <= 0) {
+    birdTimer = 2;
+    const wantFlocks = Math.round(amt * 4);
+    if (flocks.length < wantFlocks) flocks.push(newFlock(T)); else if (flocks.length > wantFlocks) flocks.pop();
+    for (let q = flocks.length - 1; q >= 0; q--) if (flocks[q].birds[0].p.distanceTo(T) > 120) flocks.splice(q, 1);
+  }
+  geeseTimer -= dt;
+  if (geeseTimer <= 0) { geeseTimer = (14 + Math.random() * 20) / Math.max(0.2, amt); if (amt > 0.05 && geese.length < 3) geese.push(newGeese(T)); }
+  let n = 0;
+  const put = (p, dir, scale, flap, id, kind, vel) => {
+    if (n >= BIRD_MAX) return;
+    _bf.copy(dir); if (_bf.lengthSq() < 1e-6) _bf.set(0, 0, 1); _bf.normalize();
+    _be.set(-Math.asin(Math.max(-0.6, Math.min(0.6, _bf.y))), Math.atan2(_bf.x, _bf.z), 0, 'YXZ'); _bq.setFromEuler(_be);
+    _bm.compose(p, _bq, _bs.setScalar(scale)); birdBody.setMatrixAt(n, _bm);
+    birdWingL.setMatrixAt(n, _bw.copy(_bm).multiply(new THREE.Matrix4().makeRotationZ(flap)));
+    birdWingR.setMatrixAt(n, _bw.copy(_bm).multiply(new THREE.Matrix4().makeRotationZ(-flap)));
+    const A = birdSnap.a, o = n * 14; A[o] = id; A[o + 1] = kind; A[o + 2] = p.x; A[o + 3] = p.y; A[o + 4] = p.z; A[o + 5] = _bq.x; A[o + 6] = _bq.y; A[o + 7] = _bq.z; A[o + 8] = _bq.w; A[o + 9] = scale; A[o + 10] = flap; A[o + 11] = vel.x; A[o + 12] = vel.y; A[o + 13] = vel.z;
+    n++;
+  };
+  const tt = TIMEU.value;
+  // murmurations: separation + alignment + cohesion, all steering toward a wandering goal around the view
+  for (const f of flocks) {
+    f.goalT -= dt;
+    if (f.goalT <= 0) { f.goalT = 4 + Math.random() * 6; const a = Math.random() * 6.28, r = Math.random() * 30; f.goal.set(T.x + Math.cos(a) * r, 4 + Math.random() * 7, T.z + Math.sin(a) * r); }
+    const c = new THREE.Vector3(), av = new THREE.Vector3(); for (const b of f.birds) { c.add(b.p); av.add(b.v); } c.divideScalar(f.birds.length); av.divideScalar(f.birds.length);
+    for (const b of f.birds) {
+      const acc = new THREE.Vector3().subVectors(f.goal, b.p).multiplyScalar(0.25).add(new THREE.Vector3().subVectors(c, b.p).multiplyScalar(0.6)).add(new THREE.Vector3().subVectors(av, b.v).multiplyScalar(0.8));
+      for (const o of f.birds) { if (o === b) continue; const d = b.p.distanceToSquared(o.p); if (d < 0.09 && d > 1e-6) acc.addScaledVector(_bf.subVectors(b.p, o.p), 0.6 / d); }
+      acc.add(new THREE.Vector3(Math.sin(tt * 0.7 + b.ph), Math.sin(tt * 1.1 + b.ph) * 0.4, Math.cos(tt * 0.9 + b.ph)).multiplyScalar(0.8));
+      b.v.addScaledVector(acc, dt); const sp = b.v.length(); if (sp > 4.2) b.v.multiplyScalar(4.2 / sp); else if (sp < 2.2) b.v.multiplyScalar(2.2 / Math.max(sp, 1e-3));
+      b.p.addScaledVector(b.v, dt); if (b.p.y < 2) b.v.y += dt * 4;
+      put(b.p, b.v, 1, Math.sin(tt * 22 + b.ph) * 0.9, b.id, 0, b.v);
+    }
+  }
+  // geese: a leader and two trailing arms; slow, synchronised wing beats
+  for (let q = geese.length - 1; q >= 0; q--) {
+    const g = geese[q]; g.t += dt; g.p.addScaledVector(g.head, g.speed * dt);
+    for (let i = 0; i < g.n; i++) {
+      const rank = Math.ceil(i / 2), sd = i === 0 ? 0 : (i % 2 ? 1 : -1);
+      _cp.copy(g.p).addScaledVector(g.head, -0.55 * rank).addScaledVector(g.side, 0.5 * rank * sd);
+      _cp.y += Math.sin(tt * 0.8 + i) * 0.08; _cp.addScaledVector(g.side, Math.sin(tt * 0.5 + i * 1.3) * 0.06);
+      put(_cp, g.head, 2.6, Math.sin(tt * 6 - rank * 0.5) * 0.7, g.id0 + i, 1, _bvel.copy(g.head).multiplyScalar(g.speed));
+    }
+    if (g.t > 50) geese.splice(q, 1);
+  }
+  for (const m of [birdBody, birdWingL, birdWingR]) { m.count = n; m.instanceMatrix.needsUpdate = true; }
+  birdSnap.n = n;
+}
+$('birds').oninput = e => { birdAmount = +e.target.value; $('birdsV').textContent = birdAmount === 0 ? 'none' : birdAmount < 0.35 ? 'few' : birdAmount < 0.7 ? 'some' : 'lots'; };
+$('shotDur').oninput = e => { $('shotDurV').textContent = e.target.value + ' s'; };
+for (const [id, S] of Object.entries(SHOTS)) { const b = document.createElement('button'); b.className = 'btn'; b.dataset.shot = id; b.textContent = S.label; b.title = 'Plays around the spot you are looking at (or the focused building)'; b.onclick = () => cineShot.active === id ? stopShot() : playShot(id); $('shotBtns').appendChild(b); }
+
+// ───────────────────────── photo mode ─────────────────────────
+// A free camera you fly yourself (WASD, Q/E, mouse look, scroll = focal length, Z/X roll) with framing aids (aspect
+// frames, thirds grid), blur/focus, exposure and time of day, photo capture cropped to the frame, an optional smooth
+// "cinematic" camera (heavy, floaty mouse look and movement), a two-point camera move with a choice of motion curves,
+// free-flight recording, and an outliner of every move / photo / view so you can go back to it and re-record.
+const photo = { active: false, yaw: 0, pitch: 0, roll: 0, focal: 35, cur: { yaw: 0, pitch: 0, roll: 0, focal: 35 }, vel: new THREE.Vector3(), smooth: false, smoothAmt: 0.5, ev: 0, paused: false, grid: false, aspect: 1.7778, A: null, B: null, move: null, flight: null, drag: null, prevFov: 32, addedHide: false, entry: null, sel: null, list: [] };
+const PH_FILM = 36; // horizontal film back (mm)
+const fovFromFocal = f => THREE.MathUtils.radToDeg(2 * Math.atan((PH_FILM / (innerWidth / innerHeight)) / 2 / f));
+const focalFromVFov = fov => (PH_FILM / (innerWidth / innerHeight)) / 2 / Math.tan(THREE.MathUtils.degToRad(fov) / 2);
+const _pe = new THREE.Euler(), _pf = new THREE.Vector3(), _pw = new THREE.Vector3();
+// motion curves for the start → end move (u: 0..1 time → 0..1 of the way)
+const PH_EASE = {
+  inout: u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2,
+  gentle: u => 0.5 - 0.5 * Math.cos(Math.PI * u),
+  soft: u => { const a = 0.15, v = 1 / (1 - a); return u < a ? v * u * u / (2 * a) : u > 1 - a ? 1 - v * (1 - u) * (1 - u) / (2 * a) : v * (u - a / 2); }, // constant speed with short soft ramps
+  linear: u => u,
+  in: u => u * u * u,
+  out: u => 1 - Math.pow(1 - u, 3),
+};
+const PH_EASE_LABEL = { inout: 'ease in & out', gentle: 'gentle ease', soft: 'linear, soft ends', linear: 'linear', in: 'ease in', out: 'ease out' };
+function photoApplyCam() {
+  const c = photo.cur;
+  camera.quaternion.setFromEuler(_pe.set(c.pitch, c.yaw, THREE.MathUtils.degToRad(c.roll), 'YXZ'));
+  camera.fov = fovFromFocal(c.focal); camera.updateProjectionMatrix();
+}
+function photoSnap() { Object.assign(photo.cur, { yaw: photo.yaw, pitch: photo.pitch, roll: photo.roll, focal: photo.focal }); photo.vel.set(0, 0, 0); }
+function photoReadCam() { _pe.setFromQuaternion(camera.quaternion, 'YXZ'); photo.yaw = _pe.y; photo.pitch = _pe.x; photo.roll = THREE.MathUtils.radToDeg(_pe.z); photoSnap(); }
+function photoAimTarget() { // keep the orbit/shadow target where the camera looks, so shadows stay sharp in view
+  camera.getWorldDirection(_pf);
+  if (_pf.y < -0.04) controls.target.copy(camera.position).addScaledVector(_pf, Math.min(80, -camera.position.y / _pf.y));
+  else { _pf.y = 0; _pf.normalize(); controls.target.copy(camera.position).addScaledVector(_pf, 25).setY(0); }
+}
+function photoSync() {
+  $('phFocal').value = photo.focal; $('phFocalV').textContent = Math.round(photo.focal) + ' mm';
+  $('phRoll').value = photo.roll; $('phRollV').textContent = photo.roll.toFixed(1).replace('.0', '') + '°';
+  $('phBlur').value = look.tilt; $('phBlurV').textContent = look.tilt;
+  $('phEv').value = photo.ev; $('phEvV').textContent = (photo.ev > 0 ? '+' : '') + photo.ev.toFixed(1) + ' EV';
+  $('phTime').value = env.hour; $('phTimeV').textContent = hhmm(env.hour);
+  $('phSmoothAmt').value = photo.smoothAmt; $('phSmoothAmtV').textContent = photo.smooth ? Math.round(photo.smoothAmt * 100) + '%' : 'off';
+  $('phPause').classList.toggle('on', photo.paused); $('phGrid').classList.toggle('on', photo.grid); $('phSmooth').classList.toggle('on', photo.smooth);
+  $('phA').textContent = photo.A ? '① Start ✓' : '① Set start'; $('phB').textContent = photo.B ? '② End ✓' : '② Set end';
+}
+function frameRect() { const W = innerWidth, H = innerHeight, a = photo.aspect || W / H; let w = W, h = W / a; if (h > H) { h = H; w = H * a; } return { x: (W - w) / 2, y: (H - h) / 2, w, h }; }
+function updatePhotoOverlay() {
+  const r = frameRect(), q = s => document.querySelector(s);
+  q('.pb-t').style.cssText = `left:0;top:0;right:0;height:${r.y}px`; q('.pb-b').style.cssText = `left:0;right:0;top:${r.y + r.h}px;bottom:0`;
+  q('.pb-l').style.cssText = `left:0;top:${r.y}px;width:${r.x}px;height:${r.h}px`; q('.pb-r').style.cssText = `right:0;top:${r.y}px;width:${r.x}px;height:${r.h}px`;
+  const g = $('photoGrid'); g.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;display:${photo.grid ? 'block' : 'none'}`;
+  g.setAttribute('viewBox', '0 0 300 300'); g.setAttribute('preserveAspectRatio', 'none');
+  g.innerHTML = '<g stroke="rgba(255,255,255,.55)" stroke-width="1" vector-effect="non-scaling-stroke"><line x1="100" y1="0" x2="100" y2="300"/><line x1="200" y1="0" x2="200" y2="300"/><line x1="0" y1="100" x2="300" y2="100"/><line x1="0" y1="200" x2="300" y2="200"/></g><g stroke="rgba(255,255,255,.35)"><line x1="145" y1="150" x2="155" y2="150"/><line x1="150" y1="145" x2="150" y2="155"/></g>';
+}
+function enterPhoto() {
+  if (photo.active) return;
+  if (view.iso) setIso(false);
+  if (cineShot.active) stopShot();
+  if (focus.obj) releaseFocus(false);
+  if (controls.autoRotate) toggleCine();
+  photo.active = true; photo.addedHide = !document.body.classList.contains('hide-ui');
+  document.body.classList.add('photo', 'hide-ui'); border.visible = false; drag = null; updateGhost(); hover.visible = false;
+  controls.enabled = false;
+  photo.prevFov = camera.fov; photo.focal = Math.round(focalFromVFov(camera.fov));
+  _pe.setFromQuaternion(camera.quaternion, 'YXZ'); photo.yaw = _pe.y; photo.pitch = _pe.x; photo.roll = 0; photoSnap();
+  photoApplyCam(); photoSync(); updatePhotoOverlay(); renderPhotoList();
+  toast('📸 Photo mode — WASD to move, drag to look, scroll to zoom, Esc to leave');
+}
+function exitPhoto() {
+  if (!photo.active) return;
+  if (photo.move) stopPhotoMove();
+  if (photo.flight) togglePhotoFlight();
+  photo.active = false; photo.paused = false; photo.ev = 0;
+  document.body.classList.remove('photo', 'photo-hide'); if (photo.addedHide) document.body.classList.remove('hide-ui');
+  border.visible = !document.body.classList.contains('hide-ui');
+  photo.roll = 0; photo.cur.roll = 0; photoApplyCam(); camera.fov = photo.prevFov; camera.updateProjectionMatrix(); camera.up.set(0, 1, 0);
+  photoAimTarget(); controls.enabled = true; updateGhost();
+}
+// ───────── poses & the outliner ─────────
+const poseNow = () => ({ p: camera.position.toArray().map(v => +v.toFixed(4)), q: camera.quaternion.toArray().map(v => +v.toFixed(6)), focal: +photo.focal.toFixed(2) });
+const poseVec = P => ({ p: new THREE.Vector3().fromArray(P.p), q: new THREE.Quaternion().fromArray(P.q).normalize(), focal: P.focal });
+const lookNow = () => ({ hour: +env.hour.toFixed(3), ev: photo.ev, tilt: look.tilt, focus: look.focus, aspect: photo.aspect });
+function applyLook(L) {
+  if (!L) return;
+  setHour(L.hour); photo.ev = L.ev || 0;
+  look.tilt = L.tilt; $('tilt').value = look.tilt; look.focus = L.focus; $('focus').value = look.focus; updateTilt();
+  const opt = [...$('phAspect').options].reduce((b, o) => Math.abs(+o.value - L.aspect) < Math.abs(+b.value - L.aspect) ? o : b); $('phAspect').value = opt.value; photo.aspect = +opt.value; updatePhotoOverlay();
+}
+function goPose(P) {
+  const v = poseVec(P); camera.position.copy(v.p); camera.quaternion.copy(v.q); photo.focal = v.focal;
+  photoReadCam(); photoApplyCam(); photoAimTarget(); photoSync();
+}
+const PH_KEY = 'polderstad.photoPoses';
+function savePoses() { try { localStorage.setItem(PH_KEY, JSON.stringify(photo.list)); } catch (e) { } }
+try { photo.list = JSON.parse(localStorage.getItem(PH_KEY) || '[]') || []; } catch (e) { photo.list = []; }
+let phId = photo.list.reduce((m, e) => Math.max(m, e.id || 0), 0);
+const PH_KIND = { move: ['🎬', 'Move'], still: ['📷', 'Photo'], view: ['📌', 'View'], flight: ['🎥', 'Flight'] };
+function addPhotoEntry(o) {
+  const n = photo.list.reduce((m, e) => { const r = e.kind === o.kind && new RegExp('^' + PH_KIND[o.kind][1] + ' (\\d+)$').exec(e.name); return r ? Math.max(m, +r[1]) : m; }, 0) + 1;
+  const e = { id: ++phId, name: `${PH_KIND[o.kind][1]} ${n}`, takes: 0, look: lookNow(), when: Date.now(), ...o };
+  photo.list.unshift(e); photo.sel = e.id; savePoses(); renderPhotoList(); return e;
+}
+function loadEntry(e, which = 'A') {
+  if (photo.move) stopPhotoMove(); if (photo.flight) togglePhotoFlight();
+  applyLook(e.look);
+  if (e.kind === 'move') { photo.A = e.A; photo.B = e.B; $('phDur').value = e.dur; $('phDurV').textContent = e.dur + ' s'; $('phEase').value = e.ease; photo.entry = e.id; }
+  else photo.entry = null;
+  photo.sel = e.id; goPose(e[which] || e.A); renderPhotoList();
+}
+function renderPhotoList() {
+  const box = $('phList'); $('phListN').textContent = photo.list.length ? `${photo.list.length}` : '';
+  box.innerHTML = photo.list.length ? '' : '<div class="phempty">Every move you play, photo you take (Enter), view you save (K) and flight you record (V) is listed here. Click one to go back to it and re-record.</div>';
+  for (const e of photo.list) {
+    const row = document.createElement('div'); row.className = 'phrow' + (e.id === photo.sel ? ' on' : '');
+    const tk = e.takes ? ` · ${e.takes} take${e.takes > 1 ? 's' : ''}` : '';
+    const meta = e.kind === 'move' ? `${e.dur} s · ${PH_EASE_LABEL[e.ease] || e.ease}${tk}` : `${Math.round(e.A.focal)} mm · ${hhmm(e.look ? e.look.hour : env.hour)}${tk}`;
+    row.innerHTML = `<span class="phic">${PH_KIND[e.kind][0]}</span><span class="phname" title="Double-click to rename"></span><span class="phmeta"></span><span class="phbtns"></span>`;
+    row.querySelector('.phname').textContent = e.name; row.querySelector('.phmeta').textContent = meta;
+    const btns = row.querySelector('.phbtns');
+    const b = (txt, tip, fn) => { const x = document.createElement('button'); x.className = 'btn sm'; x.textContent = txt; x.title = tip; x.onclick = ev => { ev.stopPropagation(); fn(); }; btns.appendChild(x); };
+    if (e.kind === 'move') {
+      b('① start', 'Jump to the start pose of this move', () => loadEntry(e, 'A'));
+      b('② end', 'Jump to the end pose of this move', () => loadEntry(e, 'B'));
+      b('▶', 'Preview this move (no recording)', () => { loadEntry(e, 'A'); playPhotoMove('preview'); });
+      b('⏺', 'Re-record this move (video and/or motion take, as ticked in the panel)', () => { loadEntry(e, 'A'); playPhotoMove('record'); });
+    } else {
+      b('→ start', 'Use this camera as the start of a move', () => { photo.A = e.A; photo.entry = null; photoSync(); toast(`Move start = ${e.name}`); });
+      b('→ end', 'Use this camera as the end of a move', () => { photo.B = e.A; photo.entry = null; photoSync(); toast(`Move end = ${e.name}`); });
+    }
+    b('✕', 'Remove from the list', () => { photo.list.splice(photo.list.indexOf(e), 1); if (photo.entry === e.id) photo.entry = null; savePoses(); renderPhotoList(); });
+    row.onclick = () => loadEntry(e, 'A');
+    const nm = row.querySelector('.phname');
+    nm.ondblclick = ev => {
+      ev.stopPropagation(); nm.contentEditable = 'true'; nm.focus(); document.getSelection().selectAllChildren(nm);
+      nm.onblur = () => { nm.contentEditable = 'false'; const t = nm.textContent.trim().slice(0, 40); if (t) e.name = t; savePoses(); renderPhotoList(); };
+    };
+    nm.onclick = ev => { if (nm.isContentEditable) ev.stopPropagation(); };
+    box.appendChild(row);
+  }
+}
+function afterPhotoTake(name) { // a motion take just finished
+  if (!mocap.take) return;
+  if ($('phZip').checked) setTimeout(() => exportTakeZips(name), 60);
+  else toast(`${name} recorded — export it with 🏠 Houdini scene .zip`);
+}
+// ───────── photos, moves, flights ─────────
+function takePhoto(scale = 1) {
+  const hv = hover.visible, gv = ghost.visible, bv = border.visible; hover.visible = ghost.visible = border.visible = false;
+  const pr = renderer.getPixelRatio(), want = BASE_PR * scale, change = Math.abs(want - pr) > 0.01;
+  if (change) { renderer.setPixelRatio(want); composer.setPixelRatio(want); composer.setSize(innerWidth, innerHeight); updateTilt(); }
+  composer.render();
+  const cv2 = renderer.domElement, k = cv2.width / innerWidth, r = frameRect(), out = document.createElement('canvas');
+  out.width = Math.round(r.w * k); out.height = Math.round(r.h * k);
+  out.getContext('2d').drawImage(cv2, Math.round(r.x * k), Math.round(r.y * k), out.width, out.height, 0, 0, out.width, out.height);
+  out.toBlob(b => download(b, fname('png')), 'image/png');
+  if (change) { renderer.setPixelRatio(pr); composer.setPixelRatio(pr); composer.setSize(innerWidth, innerHeight); updateTilt(); }
+  hover.visible = hv; ghost.visible = gv; border.visible = bv;
+  const fl = $('photoFlash'); fl.style.opacity = 1; setTimeout(() => { fl.style.opacity = 0; }, 90);
+  if (photo.active) addPhotoEntry({ kind: 'still', A: poseNow() });
+  toast(`Photo saved · ${out.width}×${out.height}`);
+}
+function saveView() { const e = addPhotoEntry({ kind: 'view', A: poseNow() }); toast(`${e.name} saved`); }
+function setPhotoKey(which) { photo[which] = poseNow(); photo.entry = null; photoSync(); toast(which === 'A' ? 'Start of the move set' : 'End of the move set'); }
+function recOptions(mode) {
+  let recV = $('phRecV').checked, recT = $('phRecT').checked;
+  if (mode === 'preview') recV = recT = false;
+  if (mode === 'record' && !recV && !recT) { recV = recT = true; $('phRecV').checked = $('phRecT').checked = true; }
+  return { recV, recT };
+}
+function playPhotoMove(mode) { // mode: undefined = as ticked, 'preview' = never record, 'record' = always record
+  if (!photo.A || !photo.B) { toast('Set a start and an end first (1 and 2)'); return; }
+  if (photo.move) return; if (photo.flight) togglePhotoFlight();
+  const { recV, recT } = recOptions(mode), dur = +$('phDur').value, ease = $('phEase').value;
+  let e = photo.list.find(x => x.id === photo.entry);
+  if (!e) { e = addPhotoEntry({ kind: 'move', A: photo.A, B: photo.B, dur, ease }); photo.entry = e.id; }
+  else Object.assign(e, { A: photo.A, B: photo.B, dur, ease, look: lookNow() });
+  if (recV || recT) e.takes++;
+  photo.sel = e.id; savePoses(); renderPhotoList();
+  photo.move = { t: 0, dur, ease, A: poseVec(photo.A), B: poseVec(photo.B), recV, recT, name: e.name };
+  goPose(photo.A); document.body.classList.add('photo-hide');
+  if (recV && !rec) toggleRec();
+  if (recT && !mocap.on) mocapStart();
+}
+function stopPhotoMove() {
+  const m = photo.move; if (!m) return; photo.move = null;
+  if (m.recV && rec) toggleRec();
+  if (m.recT && mocap.on) { mocapStop(); afterPhotoTake(m.name); }
+  document.body.classList.remove('photo-hide');
+  photoReadCam(); photoSync();
+}
+function togglePhotoFlight(mode) { // record while you fly the camera yourself (best with the smooth camera)
+  const btn = $('phFly');
+  if (photo.flight) {
+    const f = photo.flight; photo.flight = null; btn.classList.remove('on'); btn.textContent = '⏺ Record flight (V)';
+    if (f.recV && rec) toggleRec();
+    if (f.recT && mocap.on) { mocapStop(); afterPhotoTake(f.name); } else toast(`${f.name} recorded`);
+    return;
+  }
+  if (photo.move) return;
+  const { recV, recT } = recOptions(mode || 'record');
+  const e = addPhotoEntry({ kind: 'flight', A: poseNow() }); e.takes = 1; savePoses(); renderPhotoList();
+  photo.flight = { recV, recT, name: e.name };
+  btn.classList.add('on'); btn.textContent = '⏹ Stop flight (V)';
+  if (recV && !rec) toggleRec();
+  if (recT && !mocap.on) mocapStart();
+  toast(`Recording ${e.name} — fly, then V to stop`);
+}
+function toggleSmooth() { photo.smooth = !photo.smooth; photoSync(); toast(photo.smooth ? '〰 Smooth camera on' : 'Smooth camera off'); }
+function stepPhoto(dt) {
+  if (photo.move) {
+    const m = photo.move; m.t += dt; const u = Math.min(1, m.t / m.dur), e = (PH_EASE[m.ease] || PH_EASE.inout)(u);
+    camera.position.lerpVectors(m.A.p, m.B.p, e); camera.quaternion.slerpQuaternions(m.A.q, m.B.q, e);
+    photo.focal = photo.cur.focal = m.A.focal * Math.pow(m.B.focal / m.A.focal, e); // zoom evenly (geometric)
+    camera.fov = fovFromFocal(photo.focal); camera.updateProjectionMatrix();
+    photoAimTarget(); if (u >= 1) stopPhotoMove(); return;
+  }
+  // roll: Z / X (Shift = faster), R levels the horizon
+  const rl = (keys.has('z') ? 1 : 0) - (keys.has('x') ? 1 : 0);
+  if (rl) { photo.roll = THREE.MathUtils.clamp(photo.roll + rl * (keys.has('shift') ? 45 : 15) * dt, -45, 45); photoSync(); }
+  const fast = keys.has('shift') ? 3 : 1, speed = fast * THREE.MathUtils.clamp(camera.position.y * 0.8, 0.8, 30);
+  const c = photo.cur, fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw); _pw.set(0, 0, 0);
+  if (keys.has('w') || keys.has('arrowup')) _pw.x += fx, _pw.z += fz; if (keys.has('s') || keys.has('arrowdown')) _pw.x -= fx, _pw.z -= fz;
+  if (keys.has('d') || keys.has('arrowright')) _pw.x -= fz, _pw.z += fx; if (keys.has('a') || keys.has('arrowleft')) _pw.x += fz, _pw.z -= fx;
+  if (_pw.lengthSq()) _pw.normalize().multiplyScalar(speed);
+  _pw.y = ((keys.has('e') || keys.has(' ')) ? speed : 0) - (keys.has('q') ? speed : 0);
+  if (photo.smooth) { // heavy, floaty camera: velocity and view drift toward where you steer
+    const s = photo.smoothAmt;
+    photo.vel.lerp(_pw, 1 - Math.exp(-dt / (0.12 + s * 1.1)));
+    const k = 1 - Math.exp(-dt / (0.06 + s * 0.7));
+    c.yaw += (photo.yaw - c.yaw) * k; c.pitch += (photo.pitch - c.pitch) * k; c.roll += (photo.roll - c.roll) * k;
+    c.focal *= Math.pow(photo.focal / c.focal, k);
+  } else { photoSnap(); photo.vel.copy(_pw); }
+  camera.position.addScaledVector(photo.vel, dt);
+  camera.position.y = Math.max(0.12, Math.min(160, camera.position.y));
+  photoApplyCam(); photoAimTarget();
+}
+// input: photo mode takes over the mouse and keys while it is active
+addEventListener('pointerdown', e => { if (!photo.active || e.target !== cv) return; e.stopImmediatePropagation(); photo.drag = { x: e.clientX, y: e.clientY, moved: false }; }, true);
+addEventListener('pointermove', e => {
+  if (!photo.active) return; e.stopImmediatePropagation(); const d = photo.drag; if (!d || photo.move) return;
+  const dx = e.clientX - d.x, dy = e.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true; d.x = e.clientX; d.y = e.clientY;
+  const s = 0.0032 * camera.fov / 40; photo.yaw -= dx * s; photo.pitch = THREE.MathUtils.clamp(photo.pitch - dy * s, -1.55, 1.2);
+}, true);
+addEventListener('pointerup', e => {
+  if (!photo.active) return; const d = photo.drag; photo.drag = null; if (e.target === cv) e.stopImmediatePropagation();
+  if (d && !d.moved && e.target === cv) { look.focus = THREE.MathUtils.clamp(1 - e.clientY / innerHeight, 0.05, 0.95); $('focus').value = look.focus; updateTilt(); toast('Focus set'); }
+}, true);
+addEventListener('wheel', e => {
+  if (!photo.active || e.target !== cv) return; e.preventDefault(); e.stopImmediatePropagation();
+  photo.focal = THREE.MathUtils.clamp(photo.focal * (e.deltaY > 0 ? 1 / 1.07 : 1.07), 12, 200); photoSync();
+}, { capture: true, passive: false });
+function photoKey(e, k) {
+  if (k === 'escape') { if (photo.move) stopPhotoMove(); else if (photo.flight) togglePhotoFlight(); else exitPhoto(); return true; }
+  if (k === 'f9') e.preventDefault();
+  if (k === 'v') { togglePhotoFlight(); return true; }
+  if (photo.move) return true;
+  if (k === 'enter') takePhoto(1);
+  else if (k === 'h') document.body.classList.toggle('photo-hide');
+  else if (k === 'g') { photo.grid = !photo.grid; photoSync(); updatePhotoOverlay(); }
+  else if (k === 'p') { photo.paused = !photo.paused; photoSync(); toast(photo.paused ? 'World paused' : 'World running'); }
+  else if (k === 'f9' || k === 'c') toggleSmooth();
+  else if (k === 'k') saveView();
+  else if (k === 'o') exitPhoto();
+  else if (k === '1') setPhotoKey('A'); else if (k === '2') setPhotoKey('B'); else if (k === '3') playPhotoMove();
+  else if (k === 'r') { photo.roll = 0; photoSync(); }
+  return true;
+}
+for (const id of ['photoOverlay', 'photoFlash', 'photoPanel', 'photoList']) document.body.appendChild($(id)); // outside #ui, which photo mode hides
+$('photoBtn').onclick = enterPhoto; $('phExit').onclick = exitPhoto;
+$('phFocal').oninput = e => { photo.focal = +e.target.value; photoSync(); };
+$('phRoll').oninput = e => { photo.roll = +e.target.value; photoSync(); };
+$('phBlur').oninput = e => { look.tilt = +e.target.value; $('tilt').value = look.tilt; updateTilt(); photoSync(); };
+$('phEv').oninput = e => { photo.ev = +e.target.value; photoSync(); };
+$('phTime').oninput = e => { setHour(+e.target.value); photoSync(); };
+$('phAspect').oninput = e => { photo.aspect = +e.target.value; updatePhotoOverlay(); };
+$('phSmoothAmt').oninput = e => { photo.smoothAmt = +e.target.value; photo.smooth = true; photoSync(); };
+$('phGrid').onclick = () => { photo.grid = !photo.grid; photoSync(); updatePhotoOverlay(); };
+$('phPause').onclick = () => { photo.paused = !photo.paused; photoSync(); };
+$('phSmooth').onclick = toggleSmooth;
+$('phShot').onclick = () => takePhoto(1); $('phShot2').onclick = () => takePhoto(2); $('phView').onclick = saveView;
+$('phA').onclick = () => setPhotoKey('A'); $('phB').onclick = () => setPhotoKey('B'); $('phPlay').onclick = () => playPhotoMove();
+$('phFly').onclick = () => togglePhotoFlight();
+$('phDur').oninput = e => { $('phDurV').textContent = e.target.value + ' s'; };
+$('phClear').onclick = () => { if (!photo.list.length || !confirm(`Remove all ${photo.list.length} saved moves, photos and views from the list?`)) return; photo.list = []; photo.entry = photo.sel = null; savePoses(); renderPhotoList(); };
+addEventListener('resize', () => { if (photo.active) { photoApplyCam(); updatePhotoOverlay(); } });
+
 // ───────────────────────── lightning ─────────────────────────
 const bolt = { t: -1, timer: 3, mesh: null, power: 1 };
 const BOLT_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 3.3, 4), transparent: true, depthWrite: false, fog: false });
@@ -4579,6 +4945,7 @@ function strike() {
   bolt.mesh = new THREE.Mesh(mergeGeometries(geos), BOLT_MAT); geos.forEach(g => g.dispose());
   bolt.mesh.userData.noExport = true; bolt.mesh.frustumCulled = false; scene.add(bolt.mesh);
   bolt.t = 0; bolt.power = 0.6 + Math.random() * 0.6;
+  if (mocap.on && mocap.fx) mocap.fxBolts.push([takeTime(), pts.map(v => [v.x, v.y, v.z])]);
   if (fireRisk > 0 && Math.random() < 0.12 * fireRisk) { const ci = Math.floor(pts[pts.length - 1].x + HALF), cj = Math.floor(pts[pts.length - 1].z + HALF); if (inb(ci, cj)) { const tg = fireTargetAt({ i: ci, j: cj }); if (tg.obj) startFire(tg.obj, tg.k, false); } }
 }
 function stepLightning(dt) {
@@ -4590,7 +4957,8 @@ function stepLightning(dt) {
     BOLT_MAT.opacity = t < 0.1 ? 1 : t < 0.17 ? 0.9 : Math.max(0, 1 - (t - 0.17) * 4);
     if (t > 0.9) { bolt.t = -1; if (bolt.mesh) { scene.remove(bolt.mesh); bolt.mesh.geometry.dispose(); bolt.mesh = null; } f = 0; }
   }
-  renderer.toneMappingExposure = env.baseExposure * (1 + f * 1.6); hemi.intensity = env.baseHemi + f * 3; skyMat.uniforms.amt.value = 1 + f * 2.5;
+  bolt.flash = f;
+  renderer.toneMappingExposure = env.baseExposure * (1 + f * 1.6) * (photo.active ? Math.pow(2, photo.ev) : 1); hemi.intensity = env.baseHemi + f * 3; skyMat.uniforms.amt.value = 1 + f * 2.5;
   if (env.storm > 0) WINDU.value = env.windE * (0.85 + 0.2 * Math.sin(TIMEU.value * 0.9) + 0.12 * Math.sin(TIMEU.value * 2.3) * env.storm);
 }
 
@@ -4730,9 +5098,10 @@ function adaptQuality(dt) {
 }
 function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  let dt = Math.min(clock.getDelta(), 0.05);
   // keyboard camera
   const dist = viewDist(); stepIso(dt);
+  if (photo.active) stepPhoto(dt); else {
   camera.getWorldDirection(_f); _f.y = 0; _f.normalize(); _r.crossVectors(_f, camera.up).normalize();
   const sp = dist * 0.9 * dt; const mv = new THREE.Vector3();
   if (keys.has('w') || keys.has('arrowup')) mv.add(_f); if (keys.has('s') || keys.has('arrowdown')) mv.sub(_f);
@@ -4740,8 +5109,9 @@ function animate() {
   if (mv.lengthSq()) { mv.normalize().multiplyScalar(sp); camera.position.add(mv); controls.target.add(mv); }
   if (!view.iso && (keys.has('q') || keys.has('e'))) { const ang = (keys.has('q') ? 1 : -1) * dt * 1.2; const off = camera.position.clone().sub(controls.target); off.applyAxisAngle(camera.up, ang); camera.position.copy(controls.target).add(off); }
   controls.target.x = THREE.MathUtils.clamp(controls.target.x, -HALF - 10, HALF + 10); controls.target.z = THREE.MathUtils.clamp(controls.target.z, -HALF - 10, HALF + 10);
-  stepFocus(dt);
-  controls.update();
+  if (!stepShot(dt)) { stepFocus(dt); controls.update(); }
+  }
+  if (photo.active && photo.paused) dt = 0; // pause world: the camera still moves, everything else freezes
   // day/night cycle
   if (env.cycle) {
     env.hour = (env.hour + dt * 24 / env.dayLen) % 24; env.envTimer = (env.envTimer || 0) - dt; env.uiTimer = (env.uiTimer || 0) - dt;
@@ -4795,7 +5165,7 @@ function animate() {
   bakeStep(dt); adaptQuality(dt);
   sky.position.copy(camera.position);
   { const fd = view.iso ? ISO_D : 0, rf = 1 - 0.55 * env.rainE; scene.fog.near = fd + dist * 1.4 * rf; scene.fog.far = fd + (dist * 5 + 80) * rf; }
-  updateWeather(dt, dist); stepLightning(dt); stepSports(dt); stepFires(dt);
+  updateWeather(dt, dist); stepLightning(dt); stepSports(dt); stepFires(dt); stepBirds(dt);
   if (mocap.on) mocapSample();
   composer.render();
 }

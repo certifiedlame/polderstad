@@ -2,33 +2,33 @@
 <shelfDocument>
   <toolshelf name="polderstad" label="Polderstad">
     <memberTool name="polderstad_import_scene"/>
-    <memberTool name="polderstad_import_usd"/>
+    <memberTool name="polderstad_import_fx"/>
   </toolshelf>
 
   <tool name="polderstad_import_scene" label="Import Polderstad Scene" icon="OBJ_geo">
-    <helpText><![CDATA[Imports a Polderstad "Houdini scene (no USD)" zip into /obj: town with build animation, traffic, keyframed camera, Redshift materials, sun and a Redshift ROP.]]></helpText>
+    <helpText><![CDATA[Imports a Polderstad "Houdini scene" zip into /obj: town with build animation, traffic, keyframed camera, Redshift materials, sun and a Redshift ROP.]]></helpText>
     <script scriptType="python"><![CDATA[
 import sys, importlib
 TOOLS = r"Y:/PROJECTS/2026/P030_2026_MooieNel_VAST/VAST_Videogame/04_Resources/VAST_Claude/houdini_tools"
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)
-import polderstad_redshift, polderstad_houdini_scene
-importlib.reload(polderstad_redshift)
+import polderstad_materials, polderstad_houdini_scene
+importlib.reload(polderstad_materials)
 importlib.reload(polderstad_houdini_scene)
 polderstad_houdini_scene.run()
 ]]></script>
   </tool>
-
-  <tool name="polderstad_import_usd" label="Import Polderstad USD (Solaris)" icon="LOP_materiallibrary">
-    <helpText><![CDATA[Imports a Polderstad .usda export into /stage and assigns one Redshift Standard Material per part.]]></helpText>
+  <tool name="polderstad_import_fx" label="Import Polderstad FX" icon="POP_wind">
+    <helpText><![CDATA[Imports a Polderstad birds, clouds & weather _fx.zip into /obj: bird and cloud point caches (with the game models copied on), weather channels, procedural rain and lightning.]]></helpText>
     <script scriptType="python"><![CDATA[
 import sys, importlib
 TOOLS = r"Y:/PROJECTS/2026/P030_2026_MooieNel_VAST/VAST_Videogame/04_Resources/VAST_Claude/houdini_tools"
 if TOOLS not in sys.path:
     sys.path.insert(0, TOOLS)
-import polderstad_redshift
-importlib.reload(polderstad_redshift)
-polderstad_redshift.run()
+import polderstad_materials, polderstad_houdini_scene
+importlib.reload(polderstad_materials)
+importlib.reload(polderstad_houdini_scene)
+polderstad_houdini_scene.run_fx()
 ]]></script>
   </tool>
 </shelfDocument>

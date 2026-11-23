@@ -1,8 +1,8 @@
 """
-Polderstad -> classic Houdini /obj scene (no USD, no Solaris)
+Polderstad -> classic Houdini /obj scene
 Houdini 20.5.613 + Redshift 2025.6
 
-Input: the zip from Polderstad's "Houdini scene (no USD)" button (or the unzipped folder):
+Input: the zip from Polderstad's "Houdini scene" button (or the unzipped folder):
     town.geo      whole town in metres, Y-up. point Cd (game colour), pivot, birth, death (s), kind; vertex uv; prim name, part
     traffic.geo   one prototype per moving thing (prim name = id)
     anim.json     camera keys, traffic transforms per frame, fps, resolution, sun
@@ -15,6 +15,13 @@ Builds:
     /obj/<name>_cam        real keyframes on translate / rotate / focal: edit it like any camera
     /obj/<name>_sun        Redshift sun & sky, aimed like the game's sun
     /out/<name>_redshift   Redshift ROP: camera, frame range, $HIP/render/<name>.$F4.exr
+
+The separate _fx.zip (birds, clouds & weather) builds:
+    /obj/<name>_weather    keyframed rain / wind / storm / cloud cover / wet / lightning channels
+    /obj/<name>_birds      per-frame bird points (BIRD_POINTS) + the game's bird with flapping wings copied onto them
+    /obj/<name>_clouds     per-frame cloud points (CLOUD_POINTS) + the cloud shapes copied by name
+    /obj/<name>_rain       procedural rain streaks driven by the weather channels, following the camera
+    /obj/<name>_lightning  the lightning bolts
 """
 import json
 import os
@@ -27,7 +34,7 @@ import hou
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
-import polderstad_redshift as PRS  # noqa: E402  (shared material builder)
+import polderstad_materials as PRS  # noqa: E402  (shared material builder)
 
 BUILD_VEX = r'''
 // Polderstad build animation: every object pops in at its birth time and shrinks away before its death time.
@@ -92,7 +99,7 @@ def _unique(parent, name):
     return n
 
 
-def _folder_from(path):
+def _folder_from(path, marker="anim.json"):
     path = hou.text.expandString(path)
     if os.path.isdir(path):
         d = path
@@ -104,9 +111,9 @@ def _folder_from(path):
     else:
         d = os.path.dirname(path)
     for root, _, files in os.walk(d):  # the zip contains one sub folder
-        if "anim.json" in files:
+        if marker in files:
             return root.replace("\\", "/")
-    raise hou.Error("No anim.json found in %s" % path)
+    raise hou.Error("No %s found in %s" % (marker, path))
 
 
 def _keys(parm, f0, vals):
@@ -166,12 +173,11 @@ def build(path, name=None):
     matnet.layoutChildren()
 
     def material_sop(parent, after):
-        m = parent.createNode("material", "materials")
+        # one primitive wrangle instead of a Material SOP with a group per part: much faster on millions of prims
+        m = parent.createNode("attribwrangle", "materials")
         m.setInput(0, after)
-        m.parm("num_materials").set(len(parts))
-        for i, p in enumerate(parts, 1):
-            m.parm("group%d" % i).set("@part=%s" % p)
-            m.parm("shop_materialpath%d" % i).set("%s/%s" % (matnet.path(), p))
+        m.parm("class").set("primitive")
+        m.parm("snippet").set('s@shop_materialpath = "%s/" + s@part;' % matnet.path())
         return m
 
     # town with procedural build animation
@@ -263,22 +269,289 @@ def build(path, name=None):
     return {"folder": d, "controls": ctrl, "materials": matnet, "town": town, "traffic": traffic, "camera": cam, "sun": sun, "rop": rop, "parts": parts}
 
 
+# ───────────────────────── birds, clouds & weather (the separate FX zip) ─────────────────────────
+BIRD_VEX = r'''
+// Rebuild every copied bird from its point: wings flap with the recorded flap angle.
+// input 1 = bird points (P, orient, pscale, flap), input 2 = the bird model (point attrib "wing": +1 left, -1 right, 0 body)
+int np = npoints(2);
+int b = @ptnum / np, k = @ptnum % np;
+vector rest = point(2, "P", k);
+int side = point(2, "wing", k);
+if (side != 0) {
+    float a = point(1, "flap", b) * side * chf("../flap_scale");
+    rest = set(rest.x * cos(a) - rest.y * sin(a), rest.x * sin(a) + rest.y * cos(a), rest.z);
+}
+vector4 o = point(1, "orient", b);
+@P = point(1, "P", b) + qrotate(o, rest * point(1, "pscale", b) * chf("../bird_size"));
+'''
+
+RAIN_VEX = r'''
+// Procedural rain, like the game: streaks falling through a box that follows the centre object, slanted by the wind.
+// Amount, wind strength and direction come from the weather node's channels.
+float pm(float a; float b) { return a - b * floor(a / b); }
+string W = "%(weather)s";
+float r = clamp(chf(W + "/rain"), 0, 1);
+int n = int(chi("../max_drops") * r);
+float S = chf("../box_size"), H = chf("../box_height"), fall = max(0.01, chf("../fall_speed")), len = chf("../streak_length");
+float w = chf(W + "/wind");
+vector slant = set(chf(W + "/wind_dirx"), 0, chf(W + "/wind_dirz")) * (1 + w * 7) * chf("../wind_push");
+vector c = {0, 0, 0};
+string co = chs("../centre_object");
+if (co != "") c = cracktransform(0, 0, 0, {0, 0, 0}, optransform(co));
+float t = @Time;
+addpointattrib(0, "width", 0.0);
+addpointattrib(0, "Cd", {1, 1, 1});
+float wd = chf("../streak_width");
+vector col = chv("../color");
+for (int q = 0; q < n; q++) {
+    float sp = 0.75 + rand(q * 5.71 + 0.4) * 0.5;
+    float y = H - pm(rand(q * 1.93 + 0.3) * H + t * fall * sp, H);
+    float drift = (H - y) / fall;
+    float x = rand(q * 3.17 + 0.1) * S + slant.x * drift, z = rand(q * 7.31 + 0.2) * S + slant.z * drift;
+    x = c.x - S / 2 + pm(x - (c.x - S / 2), S);
+    z = c.z - S / 2 + pm(z - (c.z - S / 2), S);
+    int a = addpoint(0, set(x, y, z));
+    int b = addpoint(0, set(x - slant.x * len / fall, y + len, z - slant.z * len / fall));
+    addprim(0, "polyline", a, b);
+    setpointattrib(0, "width", a, wd); setpointattrib(0, "width", b, wd);
+    setpointattrib(0, "Cd", a, col); setpointattrib(0, "Cd", b, col);
+}
+'''
+
+LIGHTNING_PY = r'''
+# Lightning bolts from weather.json: each strike is shown for ~0.9 s from its frame (prim attrib "flash" fades out).
+import json, hou
+node = hou.pwd(); geo = node.geometry()
+path = node.parent().parm("weather_json").evalAsString()
+cache = hou.session.__dict__.setdefault("_polderstad_weather", {})
+key = (path, __import__("os").path.getmtime(path))
+if key not in cache:
+    cache.clear(); cache[key] = json.load(open(path))
+D = cache[key]
+geo.addAttrib(hou.attribType.Prim, "flash", 0.0)
+f = hou.frame(); hold = 0.9 * D["fps"]
+for s in D.get("lightning_strikes", []):
+    age = f - s["frame"]
+    if age < 0 or age > hold:
+        continue
+    poly = geo.createPolygon(); poly.setIsClosed(False)
+    for p in s["points"]:
+        pt = geo.createPoint(); pt.setPosition(p); poly.addVertex(pt)
+    poly.setAttribValue("flash", max(0.0, 1.0 - age / hold))
+'''
+
+WEATHER_CHANNELS = ("rain", "wind", "wind_dirx", "wind_dirz", "wind_angle", "storm", "cloud_cover", "wet", "lightning", "cloud_speed")
+
+
+def _file_seq(parent, name, pattern):
+    f = parent.createNode("file", name)
+    f.parm("file").set(pattern)
+    if f.parm("missingframe"):
+        f.parm("missingframe").set("empty")  # outside the take: no points instead of an error
+    return f
+
+
+def _box(parent, name, size, t):
+    b = parent.createNode("box", name)
+    b.parmTuple("size").set(size)
+    b.parmTuple("t").set(t)
+    return b
+
+
+def build_fx(path, name=None):
+    d = _folder_from(path, "weather.json")
+    D = json.load(open(os.path.join(d, "weather.json")))
+    name = re.sub(r"[^A-Za-z0-9_]", "_", name or D.get("town") or "polderstad").strip("_") or "polderstad"
+    obj = hou.node("/obj")
+    fps, frames = D["fps"], D["frames"]
+    hou.setFps(fps)
+    hou.playbar.setFrameRange(1, frames)
+    hou.playbar.setPlaybackRange(1, frames)
+    S = D.get("metresPerCell", 9.5)
+    cams = [n for n in obj.children() if n.type().name() == "cam" and n.name().startswith(name)]
+
+    # weather: keyframed channels everything else reads (and you can use anywhere: ch("/obj/<name>_weather/rain"))
+    weather = obj.createNode("null", _unique(obj, name + "_weather"))
+    weather.parm("geoscale").set(0.001) if weather.parm("geoscale") else None
+    _spare(weather, [hou.FloatParmTemplate(c, c.replace("_", " ").title(), 1) for c in WEATHER_CHANNELS]
+           + [hou.StringParmTemplate("weather_json", "Weather JSON", 1, default_value=(d + "/weather.json",), string_type=hou.stringParmType.FileReference)], "Weather")
+    for c in WEATHER_CHANNELS:
+        vals = D["channels"][c]
+        if max(vals) - min(vals) < 1e-6:
+            weather.parm(c).set(vals[0])  # constant during the take: no keys needed
+        else:
+            _keys(weather.parm(c), 1, vals)
+    weather.setComment("rain, wind, storm, cloud cover, wet, lightning: 0..1 like the game sliders\nwind_dirx/z: direction the wind blows toward")
+    weather.setGenericFlag(hou.nodeFlag.DisplayComment, True)
+
+    # birds: per-frame points + the game's bird (body + flapping wings) copied onto them
+    birds = obj.createNode("geo", _unique(obj, name + "_birds"))
+    for c in birds.children():
+        c.destroy()
+    _spare(birds, [
+        hou.FloatParmTemplate("bird_size", "Bird Size", 1, default_value=(1.0,), min=0.1, max=5, help="Multiplies pscale (the game's bird is ~1 m long, geese 2.6 m)."),
+        hou.FloatParmTemplate("flap_scale", "Flap Amount", 1, default_value=(1.0,), min=0, max=2),
+    ], "Birds")
+    pts = _file_seq(birds, "bird_points", d + "/birds/birds.$F4.geo")
+    out_pts = birds.createNode("null", "BIRD_POINTS")
+    out_pts.setInput(0, pts)
+    out_pts.setComment("P, v, orient, pscale, flap, id, kind (0 starling, 1 goose)\nCopy to Points your own bird onto this")
+    out_pts.setGenericFlag(hou.nodeFlag.DisplayComment, True)
+    body = _box(birds, "body", (0.035 * S, 0.03 * S, 0.11 * S), (0, 0, 0))
+    wl = _box(birds, "wing_left", (0.11 * S, 0.006 * S, 0.05 * S), (-0.055 * S, 0, 0.005 * S))
+    wr = _box(birds, "wing_right", (0.11 * S, 0.006 * S, 0.05 * S), (0.055 * S, 0, 0.005 * S))
+    # point attrib "wing": +1 = left wing, -1 = right wing, 0 = body (the wings rotate around the bird's Z axis)
+    tagged = []
+    for box, side in ((body, 0), (wl, 1), (wr, -1)):
+        w = birds.createNode("attribwrangle", box.name() + "_tag")
+        w.setInput(0, box)
+        w.parm("snippet").set("i@wing = %d;" % side)
+        tagged.append(w)
+    mg = birds.createNode("merge", "bird_model_parts")
+    for i, n in enumerate(tagged):
+        mg.setInput(i, n)
+    tag = birds.createNode("attribwrangle", "colour")
+    tag.setInput(0, mg)
+    tag.parm("snippet").set("v@Cd = {0.17, 0.17, 0.18};")
+    model = birds.createNode("null", "BIRD_MODEL")
+    model.setInput(0, tag)
+    cp = birds.createNode("copytopoints::2.0", "copy_birds")
+    cp.setInput(0, model)
+    cp.setInput(1, out_pts)
+    fl = birds.createNode("attribwrangle", "flap_wings")
+    fl.setInput(0, cp)
+    fl.setInput(1, out_pts)
+    fl.setInput(2, model)
+    fl.parm("snippet").set(BIRD_VEX.strip())
+    bo = birds.createNode("null", "OUT")
+    bo.setInput(0, fl)
+    bo.setDisplayFlag(True)
+    bo.setRenderFlag(True)
+    birds.layoutChildren()
+
+    # clouds: per-frame points + the cloud shapes copied by name
+    clouds = obj.createNode("geo", _unique(obj, name + "_clouds"))
+    for c in clouds.children():
+        c.destroy()
+    _spare(clouds, [hou.FloatParmTemplate("min_fade", "Hide Below Fade", 1, default_value=(0.02,), min=0, max=1,
+                                          help="Clouds fade out at the edge of the game's cloud field (point attrib fade); hide the faintest ones.")], "Clouds")
+    cpts = _file_seq(clouds, "cloud_points", d + "/clouds/clouds.$F4.geo")
+    cf = clouds.createNode("attribwrangle", "hide_faded")
+    cf.setInput(0, cpts)
+    cf.parm("snippet").set('if (f@fade < chf("../min_fade")) removepoint(0, @ptnum);')
+    cout = clouds.createNode("null", "CLOUD_POINTS")
+    cout.setInput(0, cf)
+    cout.setComment("P, orient, scale, fade, id, name (cloud_###)\nCopy to Points your own clouds / volumes onto this")
+    cout.setGenericFlag(hou.nodeFlag.DisplayComment, True)
+    shapes = clouds.createNode("file", "cloud_shapes")
+    shapes.parm("file").set(d + "/cloud_shapes.geo")
+    ccp = clouds.createNode("copytopoints::2.0", "copy_clouds")
+    ccp.setInput(0, shapes)
+    ccp.setInput(1, cout)
+    ccp.parm("useidattrib").set(1)
+    ccp.parm("idattrib").set("name")
+    co = clouds.createNode("null", "OUT")
+    co.setInput(0, ccp)
+    co.setDisplayFlag(True)
+    co.setRenderFlag(True)
+    clouds.layoutChildren()
+
+    # rain: procedural streaks driven by the weather channels, following the camera
+    rain = obj.createNode("geo", _unique(obj, name + "_rain"))
+    for c in rain.children():
+        c.destroy()
+    _spare(rain, [
+        hou.StringParmTemplate("centre_object", "Follow Object", 1, default_value=(cams[0].path() if cams else "",), string_type=hou.stringParmType.NodeReference,
+                               help="The rain box stays centred under this object (the take's camera)."),
+        hou.IntParmTemplate("max_drops", "Drops At Full Rain", 1, default_value=(9000,), min=0, max=200000),
+        hou.FloatParmTemplate("box_size", "Box Size (m)", 1, default_value=(400.0,), min=10, max=5000),
+        hou.FloatParmTemplate("box_height", "Box Height (m)", 1, default_value=(250.0,), min=5, max=2000),
+        hou.FloatParmTemplate("fall_speed", "Fall Speed (m/s)", 1, default_value=(16 * S,), min=1, max=500, help="The game's miniature-scale speed. Real rain falls ~9 m/s."),
+        hou.FloatParmTemplate("streak_length", "Streak Length (m)", 1, default_value=(0.6 * S,), min=0.01, max=50),
+        hou.FloatParmTemplate("wind_push", "Wind Push", 1, default_value=(S,), min=0, max=100),
+        hou.FloatParmTemplate("streak_width", "Streak Width (m)", 1, default_value=(0.05,), min=0.001, max=1),
+        hou.FloatParmTemplate("color", "Colour", 3, default_value=(0.78, 0.83, 0.86), look=hou.parmLook.ColorSquare, naming_scheme=hou.parmNamingScheme.RGBA),
+    ], "Rain")
+    rw = rain.createNode("attribwrangle", "rain_streaks")
+    rw.parm("class").set("detail")
+    rw.parm("snippet").set((RAIN_VEX % {"weather": weather.path()}).strip())
+    ro = rain.createNode("null", "OUT")
+    ro.setInput(0, rw)
+    ro.setDisplayFlag(True)
+    ro.setRenderFlag(True)
+    rain.layoutChildren()
+
+    # lightning bolts
+    light = obj.createNode("geo", _unique(obj, name + "_lightning"))
+    for c in light.children():
+        c.destroy()
+    _spare(light, [hou.StringParmTemplate("weather_json", "Weather JSON", 1, default_value=(d + "/weather.json",), string_type=hou.stringParmType.FileReference)], "Lightning")
+    lp = light.createNode("python", "bolts")
+    lp.parm("python").set(LIGHTNING_PY.strip())
+    lo = light.createNode("null", "OUT")
+    lo.setInput(0, lp)
+    lo.setDisplayFlag(True)
+    lo.setRenderFlag(True)
+    light.layoutChildren()
+
+    nodes = (weather, birds, clouds, rain, light)
+    for n, col in zip(nodes, ((0.3, 0.75, 0.35), (0.5, 0.5, 0.55), (0.9, 0.9, 0.95), (0.4, 0.6, 0.9), (1.0, 0.95, 0.4))):
+        n.setColor(hou.Color(col))
+    obj.layoutChildren(items=nodes)
+    return {"folder": d, "weather": weather, "birds": birds, "clouds": clouds, "rain": rain, "lightning": light}
+
+
+def _detect(path):
+    """'scene' or 'fx' for a Polderstad zip / folder (unzips it once)."""
+    path = hou.text.expandString(path)
+    if path.lower().endswith(".zip"):
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+    else:
+        names = [os.path.join(r, f) for r, _, fs in os.walk(path if os.path.isdir(path) else os.path.dirname(path)) for f in fs]
+    if any(n.replace("\\", "/").endswith("/anim.json") or n == "anim.json" for n in names):
+        return "scene"
+    if any(n.replace("\\", "/").endswith("/weather.json") or n == "weather.json" for n in names):
+        return "fx"
+    raise hou.Error("This is not a Polderstad export (no anim.json or weather.json): %s" % path)
+
+
+def run_fx(path=None):
+    if path is None:
+        path = hou.ui.selectFile(title="Polderstad birds, clouds & weather (_fx.zip or folder)", pattern="*.zip", file_type=hou.fileType.Any)
+        if not path:
+            return
+    with hou.undos.group("Import Polderstad FX"):
+        r = build_fx(path)
+    hou.ui.displayMessage(
+        "Imported into /obj:\n\n"
+        "- %s: keyframed rain / wind / storm / cloud cover / wet / lightning channels\n"
+        "- %s: birds (BIRD_POINTS inside has P, orient, pscale, flap... for your own model)\n"
+        "- %s: clouds (CLOUD_POINTS inside, for your own clouds or volumes)\n"
+        "- %s: procedural rain streaks, driven by the weather channels\n"
+        "- %s: lightning bolts"
+        % (r["weather"].name(), r["birds"].name(), r["clouds"].name(), r["rain"].name(), r["lightning"].name()), title="Polderstad")
+
+
 def run():
-    path = hou.ui.selectFile(title="Polderstad Houdini scene (.zip or folder)", pattern="*.zip", file_type=hou.fileType.Any)
+    path = hou.ui.selectFile(title="Polderstad Houdini scene or FX zip (.zip or folder)", pattern="*.zip", file_type=hou.fileType.Any)
     if not path:
         return
+    if _detect(path) == "fx":
+        return run_fx(path)
     with hou.undos.group("Import Polderstad scene"):
         r = build(path)
     r["camera"].setSelected(True, clear_all_selected=True)
     hou.ui.displayMessage(
-        "Imported into /obj (no USD):\n\n"
+        "Imported into /obj:\n\n"
         "- %s: the town, with the build animation (timing sliders on its Build Animation tab)\n"
         "- %s: cars, bikes, trains, people\n"
         "- %s: the camera, with normal keyframes you can edit\n"
         "- %s: %d Redshift materials, one per part (sliders + texture slots)\n"
         "- %s: Redshift sun & sky\n"
         "- %s: Redshift ROP -> Render to Disk\n\n"
-        "Look through the camera: viewport camera menu > %s."
+        "Look through the camera: viewport camera menu > %s.\n\n"
+        "Birds, clouds & weather: import the matching _fx.zip too (Import Polderstad FX)."
         % (r["town"].name(), r["traffic"].name(), r["camera"].name(), r["materials"].name(), len(r["parts"]), r["sun"].name(), r["rop"].path(), r["camera"].name()),
         title="Polderstad")
 
