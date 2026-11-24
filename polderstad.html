@@ -40,6 +40,8 @@
   #photoPanel{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);display:none;width:min(1000px,calc(100vw - 24px));padding:10px 14px;z-index:30}
   body.photo #photoPanel{display:block} body.photo.photo-hide #photoPanel{display:none} body.photo #hint{display:none}
   #photoPanel .ptitle{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:13px} #photoPanel .phint{font-size:11px;opacity:.65}
+  .kp{display:none} body.pad-input .kk{display:none} body.pad-input .kp{display:inline}
+  .gA{color:#7c4} .gB{color:#e54} .gX{color:#49e} .gY{color:#eb3}
   #photoPanel .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px 16px;margin:8px 0}
   #photoPanel .pgrid label{font-size:12px;display:flex;flex-direction:column;gap:2px} #photoPanel .pgrid select{font-size:12px}
   #photoPanel .btns{align-items:center} #photoPanel .plabel{font-size:12px;opacity:.75;margin-right:4px} #photoPanel .pdur{font-size:12px;display:flex;align-items:center;gap:6px}
@@ -121,7 +123,7 @@
     <div class="row"><label>Render quality</label><select id="quality"><option value="auto" selected>Auto (smooth)</option><option value="1">High</option><option value="0.75">Medium</option><option value="0.55">Low</option></select></div>
     <div class="row"><label>Orbit speed</label><input id="orbit" type="range" min="0.05" max="2" step="0.05" value="0.35"></div>
     <label class="chk"><input type="checkbox" id="focusOrbit" checked> Orbit around a focused building</label>
-    <div class="btns"><button class="btn rec" id="photoBtn" title="Fly the camera yourself and frame shots: focal length, roll, frames, grid, photos and a start→end camera move">📸 Photo mode (O)</button><button class="btn" id="iso" title="Orthographic isometric view: fixed 35° angle, Q/E turn 90°, wheel zooms">◇ Isometric (I)</button><button class="btn" id="cine">🎥 Orbit (C)</button><button class="btn" id="topdown">⬇ Top</button><button class="btn" id="hideui">Hide UI (H)</button></div>
+    <div class="btns"><button class="btn rec" id="photoBtn" title="Fly the camera yourself and frame shots: focal length, roll, frames, grid, photos and a start→end camera move">📸 Photo mode <span class="kk">(O)</span><span class="kp">(☰)</span></button><button class="btn" id="iso" title="Orthographic isometric view: fixed 35° angle, Q/E turn 90°, wheel zooms">◇ Isometric (I)</button><button class="btn" id="cine">🎥 Orbit (C)</button><button class="btn" id="topdown">⬇ Top</button><button class="btn" id="hideui">Hide UI (H)</button></div>
     <h4>Cinematic shots</h4>
     <div class="btns" id="shotBtns"></div>
     <div class="row"><label>Shot length <b id="shotDurV">12 s</b></label><input id="shotDur" type="range" min="4" max="60" step="1" value="12"></div>
@@ -181,20 +183,20 @@
 <div id="photoOverlay"><div class="pb pb-t"></div><div class="pb pb-b"></div><div class="pb pb-l"></div><div class="pb pb-r"></div><svg id="photoGrid"></svg></div>
 <div id="photoFlash"></div>
 <div id="photoPanel" class="panel">
-  <div class="ptitle"><b>📸 Photo mode</b><span class="phint">WASD move · Q/E down/up · Shift faster · Alt slower · [ ] speed · drag look · scroll zoom · Z/X roll · R level · click = focus · C/F9 smooth cam · G grid · P pause · B rewind · K save view · Enter photo · V record flight · H hide · Esc exit</span><span class="phint" id="phPad" style="display:none;opacity:1;cursor:help">🎮 controller</span></div>
+  <div class="ptitle"><b>📸 Photo mode</b><span class="phint kk">WASD move · Q/E down/up · Shift faster · Alt slower · [ ] speed · drag look · scroll zoom · Z/X roll · R level · click = focus · C/F9 smooth cam · G grid · P pause · B rewind · K save view · Enter photo · V record flight · H hide · Esc exit</span><span class="phint kp">left stick move · LT / RT down / up · click left stick = fast · right stick look · LB / RB roll · click right stick = level · D-pad ↑↓ zoom · D-pad ←→ speed · <span class="gA">Ⓐ</span> photo · <span class="gB">Ⓑ</span> rewind · <span class="gX">Ⓧ</span> pause · <span class="gY">Ⓨ</span> smooth cam · ☰ record flight · ⧉ hide panel · Esc exit</span><span class="phint" id="phPad" style="display:none;opacity:1;cursor:help">🎮 controller</span></div>
   <div class="pgrid">
-    <label>Focal length <b id="phFocalV">35 mm</b><input id="phFocal" type="range" min="12" max="200" step="1" value="35"></label>
-    <label>Roll (Z / X) <b id="phRollV">0°</b><input id="phRoll" type="range" min="-45" max="45" step="0.5" value="0"></label>
-    <label title="Camera move speed. [ and ] halve / double it, hold Shift = 3× faster, hold Alt = 4× slower">Move speed ([ ]) <b id="phSpdV">1×</b><input id="phSpd" type="range" min="-5" max="2" step="0.25" value="0"></label>
+    <label>Focal length <span class="kp">(D-pad ↑↓)</span> <b id="phFocalV">35 mm</b><input id="phFocal" type="range" min="12" max="200" step="1" value="35"></label>
+    <label>Roll <span class="kk">(Z / X)</span><span class="kp">(LB / RB)</span> <b id="phRollV">0°</b><input id="phRoll" type="range" min="-45" max="45" step="0.5" value="0"></label>
+    <label title="Camera move speed. [ and ] halve / double it, hold Shift = 3× faster, hold Alt = 4× slower">Move speed <span class="kk">([ ])</span><span class="kp">(D-pad ←→)</span> <b id="phSpdV">1×</b><input id="phSpd" type="range" min="-5" max="2" step="0.25" value="0"></label>
     <label>Smooth camera <b id="phSmoothAmtV">off</b><input id="phSmoothAmt" type="range" min="0" max="1" step="0.05" value="0.5"></label>
     <label>Blur (tilt-shift) <b id="phBlurV">6</b><input id="phBlur" type="range" min="0" max="16" step="0.5" value="6"></label>
     <label>Exposure <b id="phEvV">0 EV</b><input id="phEv" type="range" min="-2" max="2" step="0.1" value="0"></label>
     <label>Time of day <b id="phTimeV"></b><input id="phTime" type="range" min="0" max="24" step="0.05" value="14"></label>
     <label>Frame<select id="phAspect"><option value="0">Screen</option><option value="1.7778" selected>16:9</option><option value="2.39">2.39:1 cinema</option><option value="1.3333">4:3</option><option value="1">1:1</option><option value="0.8">4:5</option><option value="0.5625">9:16</option></select></label>
   </div>
-  <div class="btns"><button class="btn" id="phSmooth" title="Heavy, floaty camera for smooth handheld-style shots (like F9 in Minecraft). Strength = Smooth camera slider">〰 Smooth camera (C)</button><button class="btn" id="phGrid">▦ Grid (G)</button><button class="btn" id="phRew" title="Play the world backwards (the last ~30 s are kept). Click again to stop there, Play to run it forward again; it goes live when it catches up. Shift+click / Shift+B = 3× speed">⏪ Rewind (B)</button><button class="btn" id="phPause">⏸ Pause world (P)</button><button class="btn" id="phLive" title="Jump back to the present and carry on" style="display:none">⏭ Live</button><button class="btn" id="phView" title="Bookmark this camera in the list">📌 Save view (K)</button><button class="btn rec" id="phShot">📷 Take photo (Enter)</button><button class="btn" id="phShot2">📷 2× photo</button><button class="btn" id="phExit">✕ Exit (Esc)</button></div>
-  <div class="btns"><span class="plabel">Camera move:</span><button class="btn" id="phA">① Set start</button><button class="btn" id="phB">② Set end</button><button class="btn" id="phPlay">▶ Play move (3)</button><span class="pdur">Length <b id="phDurV">8 s</b><input id="phDur" type="range" min="2" max="40" step="1" value="8"></span><span class="pdur">Motion <select id="phEase"><option value="inout" selected>Ease in &amp; out</option><option value="gentle">Gentle ease</option><option value="soft">Linear, soft start &amp; end</option><option value="linear">Linear (constant speed)</option><option value="in">Ease in (slow start)</option><option value="out">Ease out (slow stop)</option></select></span></div>
-  <div class="btns"><span class="plabel">Recording:</span><label class="chk"><input type="checkbox" id="phRecV"> video</label><label class="chk"><input type="checkbox" id="phRecT"> motion take</label><label class="chk" title="Download the Houdini scene zip automatically after every motion take"><input type="checkbox" id="phZip" checked> auto-save Houdini .zip</label><button class="btn rec" id="phFly" title="Record while you fly the camera yourself">⏺ Record flight (V)</button></div>
+  <div class="btns"><button class="btn" id="phSmooth" title="Heavy, floaty camera for smooth handheld-style shots (like F9 in Minecraft). Strength = Smooth camera slider">〰 Smooth camera <span class="kk">(C)</span><span class="kp">(<span class="gY">Ⓨ</span>)</span></button><button class="btn" id="phGrid">▦ Grid <span class="kk">(G)</span><span class="kp"></span></button><button class="btn" id="phRew" title="Play the world backwards (the last ~30 s are kept). Click again to stop there, Play to run it forward again; it goes live when it catches up. Shift+click / Shift+B = 3× speed">⏪ Rewind <span class="kk">(B)</span><span class="kp">(<span class="gB">Ⓑ</span>)</span></button><button class="btn" id="phPause">⏸ Pause world <span class="kk">(P)</span><span class="kp">(<span class="gX">Ⓧ</span>)</span></button><button class="btn" id="phLive" title="Jump back to the present and carry on" style="display:none">⏭ Live</button><button class="btn" id="phView" title="Bookmark this camera in the list">📌 Save view <span class="kk">(K)</span><span class="kp"></span></button><button class="btn rec" id="phShot">📷 Take photo <span class="kk">(Enter)</span><span class="kp">(<span class="gA">Ⓐ</span>)</span></button><button class="btn" id="phShot2">📷 2× photo</button><button class="btn" id="phExit">✕ Exit (Esc)</button></div>
+  <div class="btns"><span class="plabel">Camera move:</span><button class="btn" id="phA">① Set start</button><button class="btn" id="phB">② Set end</button><button class="btn" id="phPlay">▶ Play move <span class="kk">(3)</span><span class="kp"></span></button><span class="pdur">Length <b id="phDurV">8 s</b><input id="phDur" type="range" min="2" max="40" step="1" value="8"></span><span class="pdur">Motion <select id="phEase"><option value="inout" selected>Ease in &amp; out</option><option value="gentle">Gentle ease</option><option value="soft">Linear, soft start &amp; end</option><option value="linear">Linear (constant speed)</option><option value="in">Ease in (slow start)</option><option value="out">Ease out (slow stop)</option></select></span></div>
+  <div class="btns"><span class="plabel">Recording:</span><label class="chk"><input type="checkbox" id="phRecV"> video</label><label class="chk"><input type="checkbox" id="phRecT"> motion take</label><label class="chk" title="Download the Houdini scene zip automatically after every motion take"><input type="checkbox" id="phZip" checked> auto-save Houdini .zip</label><button class="btn rec" id="phFly" title="Record while you fly the camera yourself">⏺ Record flight <span class="kk">(V)</span><span class="kp">(☰)</span></button></div>
 </div>
 <div id="photoList" class="panel"><div class="phhead"><b>Takes &amp; poses <span id="phListN" class="phcount"></span></b><button class="btn sm" id="phClear" title="Empty the list">Clear</button></div><div id="phList"></div></div>
   <div id="recpill">● REC</div>
@@ -4914,9 +4916,9 @@ function histApply() {
 function histSyncUI() {
   const sc = hist.mode === 'scrub', back = sc ? hist.t - hist.cur : 0;
   $('phRew').classList.toggle('on', sc && hist.rate < 0);
-  $('phRew').textContent = sc ? `⏪ ${hist.rate < 0 ? 'Rewinding' : 'Rewind'} −${back.toFixed(1)} s` : '⏪ Rewind (B)';
+  $('phRew').innerHTML = sc ? `⏪ ${hist.rate < 0 ? 'Rewinding' : 'Rewind'} −${back.toFixed(1)} s` : '⏪ Rewind ' + K('(B)', '(<span class="gB">Ⓑ</span>)');
   $('phLive').style.display = sc ? '' : 'none';
-  $('phPause').textContent = sc ? (hist.rate > 0 ? '⏸ Pause (P)' : '▶ Play (P)') : '⏸ Pause world (P)';
+  $('phPause').innerHTML = (sc ? (hist.rate > 0 ? '⏸ Pause ' : '▶ Play ') : '⏸ Pause world ') + K('(P)', '(<span class="gX">Ⓧ</span>)');
 }
 // ───────── poses & the outliner ─────────
 const poseNow = () => ({ p: camera.position.toArray().map(v => +v.toFixed(4)), q: camera.quaternion.toArray().map(v => +v.toFixed(6)), focal: +photo.focal.toFixed(2) });
@@ -5033,7 +5035,7 @@ function stopPhotoMove() {
 function togglePhotoFlight(mode) { // record while you fly the camera yourself (best with the smooth camera)
   const btn = $('phFly');
   if (photo.flight) {
-    const f = photo.flight; photo.flight = null; btn.classList.remove('on'); btn.textContent = '⏺ Record flight (V)';
+    const f = photo.flight; photo.flight = null; btn.classList.remove('on'); btn.innerHTML = '⏺ Record flight ' + K('(V)', '(☰)');
     if (f.recV && rec) toggleRec();
     if (f.recT && mocap.on) { mocapStop(); afterPhotoTake(f.name); } else toast(`${f.name} recorded`);
     return;
@@ -5042,7 +5044,7 @@ function togglePhotoFlight(mode) { // record while you fly the camera yourself (
   const { recV, recT } = recOptions(mode || 'record');
   const e = addPhotoEntry({ kind: 'flight', A: poseNow() }); e.takes = 1; savePoses(); renderPhotoList();
   photo.flight = { recV, recT, name: e.name };
-  btn.classList.add('on'); btn.textContent = '⏹ Stop flight (V)';
+  btn.classList.add('on'); btn.innerHTML = '⏹ Stop flight ' + K('(V)', '(☰)');
   if (recV && !rec) toggleRec();
   if (recT && !mocap.on) mocapStart();
   toast(`Recording ${e.name} — fly, then V to stop`);
@@ -5086,6 +5088,17 @@ function stepPhoto(dt) {
 // Y smooth camera, Menu record flight (outside photo mode: enter photo mode), View hide the panel.
 const PAD_HELP = 'Controller: left stick move · right stick look · LT / RT down / up · LB / RB roll · click left stick = fast · click right stick = level horizon · D-pad ↑↓ zoom, ←→ move speed · A photo · B rewind · X pause / play · Y smooth camera · ☰ Menu record flight · ⧉ View hide panel';
 const pad = { prev: [], g: null, fast: false };
+// shortcut labels follow the last thing you touched: controller → controller buttons, keyboard / mouse → keys
+function K(kb, pd) { return '<span class="kk">' + kb + '</span><span class="kp">' + pd + '</span>'; }
+function setPadInput(on) { if (document.body.classList.contains('pad-input') !== on) document.body.classList.toggle('pad-input', on); }
+function padTouched(g, down) {
+  if (down.length) return true;
+  for (let i = 0; i < 4; i++) if (Math.abs(g.axes[i]) > 0.35) return true;
+  return padVal(g, 6) > 0.2 || padVal(g, 7) > 0.2;
+}
+addEventListener('keydown', e => { if (e.key !== 'Escape') setPadInput(false); }, true); // Esc is also how pad users leave photo mode
+addEventListener('pointerdown', () => setPadInput(false), true);
+addEventListener('wheel', () => setPadInput(false), { capture: true, passive: true });
 function padGet() {
   const all = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const g of all) if (g && g.connected && g.axes.length >= 4 && g.buttons.length >= 16) return g;
@@ -5105,11 +5118,12 @@ function setPhotoSpd(v) {
 }
 function padIdle() { // outside photo mode the controller only knows Menu = enter photo mode
   const g = pad.g = padGet(); if (!g) return;
-  if (padEdges(g).includes(9)) enterPhoto();
+  const down = padEdges(g); if (padTouched(g, down)) setPadInput(true);
+  if (down.includes(9)) enterPhoto();
 }
 function padPhoto(dt, moveOnly) {
   const g = pad.g = padGet(); if (!g) return null;
-  const down = padEdges(g);
+  const down = padEdges(g); if (padTouched(g, down)) setPadInput(true);
   for (const b of down) {
     if (b === 0) takePhoto(1);                                   // A
     else if (b === 9) togglePhotoFlight();                       // Menu
@@ -5132,8 +5146,8 @@ function padPhoto(dt, moveOnly) {
   if (zm) { photo.focal = THREE.MathUtils.clamp(photo.focal * Math.pow(1.8, zm * dt), 12, 200); photoSync(); }
   return { lx, ly, lt: padVal(g, 6), rt: padVal(g, 7), fast: pad.fast };
 }
-addEventListener('gamepadconnected', e => { $('phPad').style.display = ''; $('phPad').title = PAD_HELP; toast('🎮 Controller connected — ' + (photo.active ? 'fly the photo camera with it' : 'press ☰ Menu for photo mode'), 4000); });
-addEventListener('gamepaddisconnected', () => { if (!padGet()) $('phPad').style.display = 'none'; toast('🎮 Controller disconnected'); });
+addEventListener('gamepadconnected', e => { setPadInput(true); $('phPad').style.display = ''; $('phPad').title = PAD_HELP; toast('🎮 Controller connected — ' + (photo.active ? 'fly the photo camera with it' : 'press ☰ Menu for photo mode'), 4000); });
+addEventListener('gamepaddisconnected', () => { if (!padGet()) { $('phPad').style.display = 'none'; setPadInput(false); } toast('🎮 Controller disconnected'); });
 // input: photo mode takes over the mouse and keys while it is active
 addEventListener('pointerdown', e => { if (!photo.active || e.target !== cv) return; e.stopImmediatePropagation(); photo.drag = { x: e.clientX, y: e.clientY, moved: false }; }, true);
 addEventListener('pointermove', e => {
